@@ -1,0 +1,11 @@
+opencv-python==4.8.0.76
+numpy==1.21.2
+matplotlib==3.4.3
+tifffile==2021.8.30
+rasterio==1.2.10
+ezdxf==0.17.0
+pylatex
+shapely
+shutil
+pyproj
+math

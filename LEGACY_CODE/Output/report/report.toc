@@ -1,0 +1,46 @@
+\babel@toc {brazil}{}\relax 
+\contentsline {section}{\numberline {1}Introduction}{5}{}%
+\contentsline {section}{\numberline {2}Dados do Cliente}{5}{}%
+\contentsline {section}{\numberline {3}Visão Geral da Área}{5}{}%
+\contentsline {section}{\numberline {4}Pontos Quentes (Hot Spots)}{10}{}%
+\contentsline {subsubsection}{\numberline {4.0.1}Painel 2-70}{10}{}%
+\contentsline {subsubsection}{\numberline {4.0.2}Painel 2-114}{10}{}%
+\contentsline {subsubsection}{\numberline {4.0.3}Painel 2-118}{11}{}%
+\contentsline {subsubsection}{\numberline {4.0.4}Painel 4-109}{12}{}%
+\contentsline {subsubsection}{\numberline {4.0.5}Painel 4-122}{13}{}%
+\contentsline {subsubsection}{\numberline {4.0.6}Painel 5-96}{14}{}%
+\contentsline {subsubsection}{\numberline {4.0.7}Painel 5-97}{15}{}%
+\contentsline {subsubsection}{\numberline {4.0.8}Painel 5-98}{16}{}%
+\contentsline {subsubsection}{\numberline {4.0.9}Painel 5-104}{17}{}%
+\contentsline {subsubsection}{\numberline {4.0.10}Painel 5-114}{18}{}%
+\contentsline {subsubsection}{\numberline {4.0.11}Painel 5-115}{19}{}%
+\contentsline {subsubsection}{\numberline {4.0.12}Painel 6-22}{20}{}%
+\contentsline {subsubsection}{\numberline {4.0.13}Painel 6-68}{21}{}%
+\contentsline {subsubsection}{\numberline {4.0.14}Painel 6-78}{22}{}%
+\contentsline {subsubsection}{\numberline {4.0.15}Painel 6-105}{23}{}%
+\contentsline {subsubsection}{\numberline {4.0.16}Painel 6-106}{24}{}%
+\contentsline {subsubsection}{\numberline {4.0.17}Painel 7-15}{25}{}%
+\contentsline {subsubsection}{\numberline {4.0.18}Painel 7-63}{26}{}%
+\contentsline {subsubsection}{\numberline {4.0.19}Painel 7-97}{27}{}%
+\contentsline {subsubsection}{\numberline {4.0.20}Painel 7-120}{28}{}%
+\contentsline {subsubsection}{\numberline {4.0.21}Painel 8-35}{29}{}%
+\contentsline {subsubsection}{\numberline {4.0.22}Painel 8-36}{30}{}%
+\contentsline {subsubsection}{\numberline {4.0.23}Painel 8-37}{31}{}%
+\contentsline {subsubsection}{\numberline {4.0.24}Painel 8-117}{32}{}%
+\contentsline {subsubsection}{\numberline {4.0.25}Painel 8-122}{33}{}%
+\contentsline {subsubsection}{\numberline {4.0.26}Painel 9-43}{34}{}%
+\contentsline {subsubsection}{\numberline {4.0.27}Painel 9-92}{35}{}%
+\contentsline {subsubsection}{\numberline {4.0.28}Painel 10-53}{36}{}%
+\contentsline {subsubsection}{\numberline {4.0.29}Painel 11-61}{37}{}%
+\contentsline {subsubsection}{\numberline {4.0.30}Painel 12-22}{38}{}%
+\contentsline {subsubsection}{\numberline {4.0.31}Painel 12-56}{39}{}%
+\contentsline {subsubsection}{\numberline {4.0.32}Painel 12-61}{40}{}%
+\contentsline {subsubsection}{\numberline {4.0.33}Painel 13-10}{41}{}%
+\contentsline {subsubsection}{\numberline {4.0.34}Painel 13-16}{42}{}%
+\contentsline {subsubsection}{\numberline {4.0.35}Painel 13-18}{43}{}%
+\contentsline {subsubsection}{\numberline {4.0.36}Painel 13-55}{44}{}%
+\contentsline {subsubsection}{\numberline {4.0.37}Painel 13-56}{45}{}%
+\contentsline {subsubsection}{\numberline {4.0.38}Painel 13-60}{46}{}%
+\contentsline {subsubsection}{\numberline {4.0.39}Painel 13-62}{47}{}%
+\contentsline {section}{\numberline {5}Painéis Desligados}{49}{}%
+\contentsline {section}{\numberline {6}Diodos de Bypass Queimados}{50}{}%

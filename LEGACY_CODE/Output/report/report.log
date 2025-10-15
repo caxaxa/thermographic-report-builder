@@ -1,0 +1,2348 @@
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (MiKTeX 24.1) (preloaded format=pdflatex 2025.3.19)  24 MAR 2025 16:28
+entering extended mode
+ \write18 enabled.
+ %&-line parsing enabled.
+**./report.tex
+(report.tex
+LaTeX2e <2023-11-01> patch level 1
+L3 programming layer <2024-01-04>
+(d:\MiKTeX\tex/latex/base\article.cls
+Document Class: article 2023/05/17 v1.4n Standard LaTeX document class
+(d:\MiKTeX\tex/latex/base\size10.clo
+File: size10.clo 2023/05/17 v1.4n Standard LaTeX file (size option)
+)
+\c@part=\count187
+\c@section=\count188
+\c@subsection=\count189
+\c@subsubsection=\count190
+\c@paragraph=\count191
+\c@subparagraph=\count192
+\c@figure=\count193
+\c@table=\count194
+\abovecaptionskip=\skip48
+\belowcaptionskip=\skip49
+\bibindent=\dimen140
+) (d:\MiKTeX\tex/latex/base\fontenc.sty
+Package: fontenc 2021/04/29 v2.0v Standard LaTeX package
+)
+(d:\MiKTeX\tex/latex/base\inputenc.sty
+Package: inputenc 2021/02/14 v1.3d Input encoding file
+\inpenc@prehook=\toks17
+\inpenc@posthook=\toks18
+) (d:\MiKTeX\tex/latex/lm\lmodern.sty
+Package: lmodern 2015/05/01 v1.6.1 Latin Modern Fonts
+LaTeX Font Info:    Overwriting symbol font `operators' in version `normal'
+(Font)                  OT1/cmr/m/n --> OT1/lmr/m/n on input line 22.
+LaTeX Font Info:    Overwriting symbol font `letters' in version `normal'
+(Font)                  OML/cmm/m/it --> OML/lmm/m/it on input line 23.
+LaTeX Font Info:    Overwriting symbol font `symbols' in version `normal'
+(Font)                  OMS/cmsy/m/n --> OMS/lmsy/m/n on input line 24.
+LaTeX Font Info:    Overwriting symbol font `largesymbols' in version `normal'
+(Font)                  OMX/cmex/m/n --> OMX/lmex/m/n on input line 25.
+LaTeX Font Info:    Overwriting symbol font `operators' in version `bold'
+(Font)                  OT1/cmr/bx/n --> OT1/lmr/bx/n on input line 26.
+LaTeX Font Info:    Overwriting symbol font `letters' in version `bold'
+(Font)                  OML/cmm/b/it --> OML/lmm/b/it on input line 27.
+LaTeX Font Info:    Overwriting symbol font `symbols' in version `bold'
+(Font)                  OMS/cmsy/b/n --> OMS/lmsy/b/n on input line 28.
+LaTeX Font Info:    Overwriting symbol font `largesymbols' in version `bold'
+(Font)                  OMX/cmex/m/n --> OMX/lmex/m/n on input line 29.
+LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `normal'
+(Font)                  OT1/cmr/bx/n --> OT1/lmr/bx/n on input line 31.
+LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `normal'
+(Font)                  OT1/cmss/m/n --> OT1/lmss/m/n on input line 32.
+LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `normal'
+(Font)                  OT1/cmr/m/it --> OT1/lmr/m/it on input line 33.
+LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `normal'
+(Font)                  OT1/cmtt/m/n --> OT1/lmtt/m/n on input line 34.
+LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `bold'
+(Font)                  OT1/cmr/bx/n --> OT1/lmr/bx/n on input line 35.
+LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
+(Font)                  OT1/cmss/bx/n --> OT1/lmss/bx/n on input line 36.
+LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `bold'
+(Font)                  OT1/cmr/bx/it --> OT1/lmr/bx/it on input line 37.
+LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
+(Font)                  OT1/cmtt/m/n --> OT1/lmtt/m/n on input line 38.
+)
+(d:\MiKTeX\tex/latex/base\textcomp.sty
+Package: textcomp 2020/02/02 v2.0n Standard LaTeX package
+)
+(d:\MiKTeX\tex/latex/lastpage\lastpage.sty
+Package: lastpage 2025/01/27 v2.1e lastpage: 2.09 or 2e? (HMM)
+
+(d:\MiKTeX\tex/latex/lastpage\lastpage2e.sty
+Package: lastpage2e 2025/01/27 v2.1e Decide which 2e lastpage version to use (H
+MM)
+
+(d:\MiKTeX\tex/latex/lastpage\lastpageclassic.sty
+Package: lastpageclassic 2025/01/27 v2.1e Refers to last page's name (HMM; JPG)
+
+) 
+)) (d:\MiKTeX\tex/latex/graphics\graphicx.sty
+Package: graphicx 2021/09/16 v1.2d Enhanced LaTeX Graphics (DPC,SPQR)
+
+(d:\MiKTeX\tex/latex/graphics\keyval.sty
+Package: keyval 2022/05/29 v1.15 key=value parser (DPC)
+\KV@toks@=\toks19
+)
+(d:\MiKTeX\tex/latex/graphics\graphics.sty
+Package: graphics 2022/03/10 v1.4e Standard LaTeX Graphics (DPC,SPQR)
+
+(d:\MiKTeX\tex/latex/graphics\trig.sty
+Package: trig 2021/08/11 v1.11 sin cos tan (DPC)
+)
+(d:\MiKTeX\tex/latex/graphics-cfg\graphics.cfg
+File: graphics.cfg 2016/06/04 v1.11 sample graphics configuration
+)
+Package graphics Info: Driver file: pdftex.def on input line 107.
+
+(d:\MiKTeX\tex/latex/graphics-def\pdftex.def
+File: pdftex.def 2022/09/22 v1.2b Graphics/color driver for pdftex
+))
+\Gin@req@height=\dimen141
+\Gin@req@width=\dimen142
+)
+(d:\MiKTeX\tex/latex/placeins\placeins.sty
+Package: placeins 2005/04/18  v 2.2
+) (d:\MiKTeX\tex/latex/tools\calc.sty
+Package: calc 2023/07/08 v4.3 Infix arithmetic (KKT,FJ)
+\calc@Acount=\count195
+\calc@Bcount=\count196
+\calc@Adimen=\dimen143
+\calc@Bdimen=\dimen144
+\calc@Askip=\skip50
+\calc@Bskip=\skip51
+LaTeX Info: Redefining \setlength on input line 80.
+LaTeX Info: Redefining \addtolength on input line 81.
+\calc@Ccount=\count197
+\calc@Cskip=\skip52
+) (d:\MiKTeX\tex/latex/pgf/frontendlayer\tikz.sty
+(d:\MiKTeX\tex/latex/pgf/basiclayer\pgf.sty
+(d:\MiKTeX\tex/latex/pgf/utilities\pgfrcs.sty
+(d:\MiKTeX\tex/generic/pgf/utilities\pgfutil-common.tex
+\pgfutil@everybye=\toks20
+\pgfutil@tempdima=\dimen145
+\pgfutil@tempdimb=\dimen146
+)
+(d:\MiKTeX\tex/generic/pgf/utilities\pgfutil-latex.def
+\pgfutil@abb=\box51
+)
+(d:\MiKTeX\tex/generic/pgf/utilities\pgfrcs.code.tex
+(d:\MiKTeX\tex/generic/pgf\pgf.revision.tex)
+Package: pgfrcs 2023-01-15 v3.1.10 (3.1.10)
+))
+Package: pgf 2023-01-15 v3.1.10 (3.1.10)
+
+(d:\MiKTeX\tex/latex/pgf/basiclayer\pgfcore.sty
+(d:\MiKTeX\tex/latex/pgf/systemlayer\pgfsys.sty
+(d:\MiKTeX\tex/generic/pgf/systemlayer\pgfsys.code.tex
+Package: pgfsys 2023-01-15 v3.1.10 (3.1.10)
+
+(d:\MiKTeX\tex/generic/pgf/utilities\pgfkeys.code.tex
+\pgfkeys@pathtoks=\toks21
+\pgfkeys@temptoks=\toks22
+
+(d:\MiKTeX\tex/generic/pgf/utilities\pgfkeyslibraryfiltered.code.tex
+\pgfkeys@tmptoks=\toks23
+))
+\pgf@x=\dimen147
+\pgf@y=\dimen148
+\pgf@xa=\dimen149
+\pgf@ya=\dimen150
+\pgf@xb=\dimen151
+\pgf@yb=\dimen152
+\pgf@xc=\dimen153
+\pgf@yc=\dimen154
+\pgf@xd=\dimen155
+\pgf@yd=\dimen156
+\w@pgf@writea=\write3
+\r@pgf@reada=\read2
+\c@pgf@counta=\count198
+\c@pgf@countb=\count199
+\c@pgf@countc=\count266
+\c@pgf@countd=\count267
+\t@pgf@toka=\toks24
+\t@pgf@tokb=\toks25
+\t@pgf@tokc=\toks26
+\pgf@sys@id@count=\count268
+
+(d:\MiKTeX\tex/generic/pgf/systemlayer\pgf.cfg
+File: pgf.cfg 2023-01-15 v3.1.10 (3.1.10)
+)
+Driver file for pgf: pgfsys-pdftex.def
+
+(d:\MiKTeX\tex/generic/pgf/systemlayer\pgfsys-pdftex.def
+File: pgfsys-pdftex.def 2023-01-15 v3.1.10 (3.1.10)
+
+(d:\MiKTeX\tex/generic/pgf/systemlayer\pgfsys-common-pdf.def
+File: pgfsys-common-pdf.def 2023-01-15 v3.1.10 (3.1.10)
+)))
+(d:\MiKTeX\tex/generic/pgf/systemlayer\pgfsyssoftpath.code.tex
+File: pgfsyssoftpath.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgfsyssoftpath@smallbuffer@items=\count269
+\pgfsyssoftpath@bigbuffer@items=\count270
+)
+(d:\MiKTeX\tex/generic/pgf/systemlayer\pgfsysprotocol.code.tex
+File: pgfsysprotocol.code.tex 2023-01-15 v3.1.10 (3.1.10)
+))
+(d:\MiKTeX\tex/latex/xcolor\xcolor.sty
+Package: xcolor 2023/11/15 v3.01 LaTeX color extensions (UK)
+
+(d:\MiKTeX\tex/latex/graphics-cfg\color.cfg
+File: color.cfg 2016/01/02 v1.6 sample color configuration
+)
+Package xcolor Info: Driver file: pdftex.def on input line 274.
+
+(d:\MiKTeX\tex/latex/graphics\mathcolor.ltx)
+Package xcolor Info: Model `cmy' substituted by `cmy0' on input line 1350.
+Package xcolor Info: Model `hsb' substituted by `rgb' on input line 1354.
+Package xcolor Info: Model `RGB' extended on input line 1366.
+Package xcolor Info: Model `HTML' substituted by `rgb' on input line 1368.
+Package xcolor Info: Model `Hsb' substituted by `hsb' on input line 1369.
+Package xcolor Info: Model `tHsb' substituted by `hsb' on input line 1370.
+Package xcolor Info: Model `HSB' substituted by `hsb' on input line 1371.
+Package xcolor Info: Model `Gray' substituted by `gray' on input line 1372.
+Package xcolor Info: Model `wave' substituted by `hsb' on input line 1373.
+)
+(d:\MiKTeX\tex/latex/graphics\dvipsnam.def
+File: dvipsnam.def 2016/06/17 v3.0m Driver-dependent file (DPC,SPQR)
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcore.code.tex
+Package: pgfcore 2023-01-15 v3.1.10 (3.1.10)
+
+(d:\MiKTeX\tex/generic/pgf/math\pgfmath.code.tex
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathutil.code.tex)
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathparser.code.tex
+\pgfmath@dimen=\dimen157
+\pgfmath@count=\count271
+\pgfmath@box=\box52
+\pgfmath@toks=\toks27
+\pgfmath@stack@operand=\toks28
+\pgfmath@stack@operation=\toks29
+)
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathfunctions.code.tex)
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathfunctions.basic.code.tex)
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathfunctions.trigonometric.code.tex)
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathfunctions.random.code.tex)
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathfunctions.comparison.code.tex)
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathfunctions.base.code.tex)
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathfunctions.round.code.tex)
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathfunctions.misc.code.tex)
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathfunctions.integerarithmetics.code.tex)
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathcalc.code.tex)
+(d:\MiKTeX\tex/generic/pgf/math\pgfmathfloat.code.tex
+\c@pgfmathroundto@lastzeros=\count272
+))
+(d:\MiKTeX\tex/generic/pgf/math\pgfint.code.tex)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcorepoints.code.tex
+File: pgfcorepoints.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgf@picminx=\dimen158
+\pgf@picmaxx=\dimen159
+\pgf@picminy=\dimen160
+\pgf@picmaxy=\dimen161
+\pgf@pathminx=\dimen162
+\pgf@pathmaxx=\dimen163
+\pgf@pathminy=\dimen164
+\pgf@pathmaxy=\dimen165
+\pgf@xx=\dimen166
+\pgf@xy=\dimen167
+\pgf@yx=\dimen168
+\pgf@yy=\dimen169
+\pgf@zx=\dimen170
+\pgf@zy=\dimen171
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcorepathconstruct.code.tex
+File: pgfcorepathconstruct.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgf@path@lastx=\dimen172
+\pgf@path@lasty=\dimen173
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcorepathusage.code.tex
+File: pgfcorepathusage.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgf@shorten@end@additional=\dimen174
+\pgf@shorten@start@additional=\dimen175
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcorescopes.code.tex
+File: pgfcorescopes.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgfpic=\box53
+\pgf@hbox=\box54
+\pgf@layerbox@main=\box55
+\pgf@picture@serial@count=\count273
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcoregraphicstate.code.tex
+File: pgfcoregraphicstate.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgflinewidth=\dimen176
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcoretransformations.code.tex
+File: pgfcoretransformations.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgf@pt@x=\dimen177
+\pgf@pt@y=\dimen178
+\pgf@pt@temp=\dimen179
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcorequick.code.tex
+File: pgfcorequick.code.tex 2023-01-15 v3.1.10 (3.1.10)
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcoreobjects.code.tex
+File: pgfcoreobjects.code.tex 2023-01-15 v3.1.10 (3.1.10)
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcorepathprocessing.code.tex
+File: pgfcorepathprocessing.code.tex 2023-01-15 v3.1.10 (3.1.10)
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcorearrows.code.tex
+File: pgfcorearrows.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgfarrowsep=\dimen180
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcoreshade.code.tex
+File: pgfcoreshade.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgf@max=\dimen181
+\pgf@sys@shading@range@num=\count274
+\pgf@shadingcount=\count275
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcoreimage.code.tex
+File: pgfcoreimage.code.tex 2023-01-15 v3.1.10 (3.1.10)
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcoreexternal.code.tex
+File: pgfcoreexternal.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgfexternal@startupbox=\box56
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcorelayers.code.tex
+File: pgfcorelayers.code.tex 2023-01-15 v3.1.10 (3.1.10)
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcoretransparency.code.tex
+File: pgfcoretransparency.code.tex 2023-01-15 v3.1.10 (3.1.10)
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcorepatterns.code.tex
+File: pgfcorepatterns.code.tex 2023-01-15 v3.1.10 (3.1.10)
+)
+(d:\MiKTeX\tex/generic/pgf/basiclayer\pgfcorerdf.code.tex
+File: pgfcorerdf.code.tex 2023-01-15 v3.1.10 (3.1.10)
+)))
+(d:\MiKTeX\tex/generic/pgf/modules\pgfmoduleshapes.code.tex
+File: pgfmoduleshapes.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgfnodeparttextbox=\box57
+)
+(d:\MiKTeX\tex/generic/pgf/modules\pgfmoduleplot.code.tex
+File: pgfmoduleplot.code.tex 2023-01-15 v3.1.10 (3.1.10)
+)
+(d:\MiKTeX\tex/latex/pgf/compatibility\pgfcomp-version-0-65.sty
+Package: pgfcomp-version-0-65 2023-01-15 v3.1.10 (3.1.10)
+\pgf@nodesepstart=\dimen182
+\pgf@nodesepend=\dimen183
+)
+(d:\MiKTeX\tex/latex/pgf/compatibility\pgfcomp-version-1-18.sty
+Package: pgfcomp-version-1-18 2023-01-15 v3.1.10 (3.1.10)
+))
+(d:\MiKTeX\tex/latex/pgf/utilities\pgffor.sty
+(d:\MiKTeX\tex/latex/pgf/utilities\pgfkeys.sty
+(d:\MiKTeX\tex/generic/pgf/utilities\pgfkeys.code.tex))
+(d:\MiKTeX\tex/latex/pgf/math\pgfmath.sty
+(d:\MiKTeX\tex/generic/pgf/math\pgfmath.code.tex))
+(d:\MiKTeX\tex/generic/pgf/utilities\pgffor.code.tex
+Package: pgffor 2023-01-15 v3.1.10 (3.1.10)
+\pgffor@iter=\dimen184
+\pgffor@skip=\dimen185
+\pgffor@stack=\toks30
+\pgffor@toks=\toks31
+))
+(d:\MiKTeX\tex/generic/pgf/frontendlayer/tikz\tikz.code.tex
+Package: tikz 2023-01-15 v3.1.10 (3.1.10)
+
+(d:\MiKTeX\tex/generic/pgf/libraries\pgflibraryplothandlers.code.tex
+File: pgflibraryplothandlers.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgf@plot@mark@count=\count276
+\pgfplotmarksize=\dimen186
+)
+\tikz@lastx=\dimen187
+\tikz@lasty=\dimen188
+\tikz@lastxsaved=\dimen189
+\tikz@lastysaved=\dimen190
+\tikz@lastmovetox=\dimen191
+\tikz@lastmovetoy=\dimen192
+\tikzleveldistance=\dimen193
+\tikzsiblingdistance=\dimen194
+\tikz@figbox=\box58
+\tikz@figbox@bg=\box59
+\tikz@tempbox=\box60
+\tikz@tempbox@bg=\box61
+\tikztreelevel=\count277
+\tikznumberofchildren=\count278
+\tikznumberofcurrentchild=\count279
+\tikz@fig@count=\count280
+
+(d:\MiKTeX\tex/generic/pgf/modules\pgfmodulematrix.code.tex
+File: pgfmodulematrix.code.tex 2023-01-15 v3.1.10 (3.1.10)
+\pgfmatrixcurrentrow=\count281
+\pgfmatrixcurrentcolumn=\count282
+\pgf@matrix@numberofcolumns=\count283
+)
+\tikz@expandcount=\count284
+
+(d:\MiKTeX\tex/generic/pgf/frontendlayer/tikz/libraries\tikzlibrarytopaths.code
+.tex
+File: tikzlibrarytopaths.code.tex 2023-01-15 v3.1.10 (3.1.10)
+))) (d:\MiKTeX\tex/latex/fancyhdr\fancyhdr.sty
+Package: fancyhdr 2025/02/07 v5.2 Extensive control of page headers and footers
+
+\f@nch@headwidth=\skip53
+\f@nch@offset@elh=\skip54
+\f@nch@offset@erh=\skip55
+\f@nch@offset@olh=\skip56
+\f@nch@offset@orh=\skip57
+\f@nch@offset@elf=\skip58
+\f@nch@offset@erf=\skip59
+\f@nch@offset@olf=\skip60
+\f@nch@offset@orf=\skip61
+\f@nch@height=\skip62
+\f@nch@footalignment=\skip63
+\f@nch@widthL=\skip64
+\f@nch@widthC=\skip65
+\f@nch@widthR=\skip66
+\@temptokenb=\toks32
+)
+(d:\MiKTeX\tex/latex/subfig\subfig.sty
+Package: subfig 2005/06/28 ver: 1.3 subfig package
+ (d:\MiKTeX\tex/latex/caption\caption.sty
+Package: caption 2023/08/05 v3.6o Customizing captions (AR)
+(d:\MiKTeX\tex/latex/caption\caption3.sty
+Package: caption3 2023/07/31 v2.4d caption3 kernel (AR)
+\caption@tempdima=\dimen195
+\captionmargin=\dimen196
+\caption@leftmargin=\dimen197
+\caption@rightmargin=\dimen198
+\caption@width=\dimen199
+\caption@indent=\dimen256
+\caption@parindent=\dimen257
+\caption@hangindent=\dimen258
+Package caption Info: Standard document class detected.
+)
+\c@caption@flags=\count285
+\c@continuedfloat=\count286
+)
+\c@KVtest=\count287
+\sf@farskip=\skip67
+\sf@captopadj=\dimen259
+\sf@capskip=\skip68
+\sf@nearskip=\skip69
+\c@subfigure=\count288
+\c@subfigure@save=\count289
+\c@lofdepth=\count290
+\c@subtable=\count291
+\c@subtable@save=\count292
+\c@lotdepth=\count293
+\sf@top=\skip70
+\sf@bottom=\skip71
+)
+(d:\MiKTeX\tex/latex/geometry\geometry.sty
+Package: geometry 2020/01/02 v5.9 Page Geometry
+
+(d:\MiKTeX\tex/generic/iftex\ifvtex.sty
+Package: ifvtex 2019/10/25 v1.7 ifvtex legacy package. Use iftex instead.
+ (d:\MiKTeX\tex/generic/iftex\iftex.sty
+Package: iftex 2022/02/03 v1.0f TeX engine tests
+))
+\Gm@cnth=\count294
+\Gm@cntv=\count295
+\c@Gm@tempcnt=\count296
+\Gm@bindingoffset=\dimen260
+\Gm@wd@mp=\dimen261
+\Gm@odd@mp=\dimen262
+\Gm@even@mp=\dimen263
+\Gm@layoutwidth=\dimen264
+\Gm@layoutheight=\dimen265
+\Gm@layouthoffset=\dimen266
+\Gm@layoutvoffset=\dimen267
+\Gm@dimlist=\toks33
+ (d:\MiKTeX\tex/latex/geometry\geometry.cfg))
+(d:\MiKTeX\tex/latex/booktabs\booktabs.sty
+Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
+\heavyrulewidth=\dimen268
+\lightrulewidth=\dimen269
+\cmidrulewidth=\dimen270
+\belowrulesep=\dimen271
+\belowbottomsep=\dimen272
+\aboverulesep=\dimen273
+\abovetopsep=\dimen274
+\cmidrulesep=\dimen275
+\cmidrulekern=\dimen276
+\defaultaddspace=\dimen277
+\@cmidla=\count297
+\@cmidlb=\count298
+\@aboverulesep=\dimen278
+\@belowrulesep=\dimen279
+\@thisruleclass=\count299
+\@lastruleclass=\count300
+\@thisrulewidth=\dimen280
+)
+(d:\MiKTeX\tex/generic/babel\babel.sty
+Package: babel 2024/01/07 v24.1 The Babel package
+\babel@savecnt=\count301
+\U@D=\dimen281
+\l@unhyphenated=\language79
+
+(d:\MiKTeX\tex/generic/babel\txtbabel.def)
+\bbl@readstream=\read3
+\bbl@dirlevel=\count302
+
+*************************************
+* Local config file bblopts.cfg used
+*
+(d:\MiKTeX\tex/latex/arabi\bblopts.cfg
+File: bblopts.cfg 2005/09/08 v0.1 add Arabic and Farsi to "declared" options of
+ babel
+)
+(d:\MiKTeX\tex/latex/babel-portuges\brazil.ldf
+Language: portuges 2021/07/09 v1.2t Portuguese support from the babel system
+Package babel Info: Hyphen rules for 'brazil' set to \l@portuguese
+(babel)             (\language56). Reported on input line 111.
+Package babel Info: Making " an active character on input line 143.
+))
+(d:\MiKTeX\tex/generic/pgf/frontendlayer/tikz/libraries\tikzlibrarycalc.code.te
+x
+File: tikzlibrarycalc.code.tex 2023-01-15 v3.1.10 (3.1.10)
+)
+LaTeX Font Info:    Trying to load font information for T1+lmr on input line 27
+.
+ (d:\MiKTeX\tex/latex/lm\t1lmr.fd
+File: t1lmr.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+)
+(d:\MiKTeX\tex/latex/l3backend\l3backend-pdftex.def
+File: l3backend-pdftex.def 2024-01-04 L3 backend support: PDF output (pdfTeX)
+\l__color_backend_stack_int=\count303
+\l__pdf_internal_box=\box62
+) (report.aux)
+\openout1 = `report.aux'.
+
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 27.
+LaTeX Font Info:    ... okay on input line 27.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 27.
+LaTeX Font Info:    ... okay on input line 27.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 27.
+LaTeX Font Info:    ... okay on input line 27.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 27.
+LaTeX Font Info:    ... okay on input line 27.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 27.
+LaTeX Font Info:    ... okay on input line 27.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 27.
+LaTeX Font Info:    ... okay on input line 27.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 27.
+LaTeX Font Info:    ... okay on input line 27.
+
+(d:\MiKTeX\tex/context/base/mkii\supp-pdf.mkii
+[Loading MPS to PDF converter (version 2006.09.02).]
+\scratchcounter=\count304
+\scratchdimen=\dimen282
+\scratchbox=\box63
+\nofMPsegments=\count305
+\nofMParguments=\count306
+\everyMPshowfont=\toks34
+\MPscratchCnt=\count307
+\MPscratchDim=\dimen283
+\MPnumerator=\count308
+\makeMPintoPDFobject=\count309
+\everyMPtoPDFconversion=\toks35
+) (d:\MiKTeX\tex/latex/epstopdf-pkg\epstopdf-base.sty
+Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
+
+(d:\MiKTeX\tex/generic/infwarerr\infwarerr.sty
+Package: infwarerr 2019/12/03 v1.5 Providing info/warning/error messages (HO)
+)
+(d:\MiKTeX\tex/latex/grfext\grfext.sty
+Package: grfext 2019/12/03 v1.3 Manage graphics extensions (HO)
+
+(d:\MiKTeX\tex/generic/kvdefinekeys\kvdefinekeys.sty
+Package: kvdefinekeys 2019-12-19 v1.6 Define keys (HO)
+))
+(d:\MiKTeX\tex/latex/kvoptions\kvoptions.sty
+Package: kvoptions 2022-06-15 v3.15 Key value format for package options (HO)
+
+(d:\MiKTeX\tex/generic/ltxcmds\ltxcmds.sty
+Package: ltxcmds 2023-12-04 v1.26 LaTeX kernel commands for general use (HO)
+)
+(d:\MiKTeX\tex/latex/kvsetkeys\kvsetkeys.sty
+Package: kvsetkeys 2022-10-05 v1.19 Key value parser (HO)
+))
+(d:\MiKTeX\tex/generic/pdftexcmds\pdftexcmds.sty
+Package: pdftexcmds 2020-06-27 v0.33 Utility functions of pdfTeX for LuaTeX (HO
+)
+Package pdftexcmds Info: \pdf@primitive is available.
+Package pdftexcmds Info: \pdf@ifprimitive is available.
+Package pdftexcmds Info: \pdfdraftmode found.
+)
+Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 4
+85.
+Package grfext Info: Graphics extension search list:
+(grfext)             [.pdf,.png,.jpg,.mps,.jpeg,.jbig2,.jb2,.PDF,.PNG,.JPG,.JPE
+G,.JBIG2,.JB2,.eps]
+(grfext)             \AppendGraphicsExtensions on input line 504.
+
+(d:\MiKTeX\tex/latex/00miktex\epstopdf-sys.cfg
+File: epstopdf-sys.cfg 2021/03/18 v2.0 Configuration of epstopdf for MiKTeX
+))
+Package caption Info: Begin \AtBeginDocument code.
+Package caption Info: subfig package v1.3 is loaded.
+Package caption Info: End \AtBeginDocument code.
+
+*geometry* driver: auto-detecting
+*geometry* detected driver: pdftex
+*geometry* verbose mode - [ preamble ] result:
+* driver: pdftex
+* paper: <default>
+* layout: <same size as paper>
+* layoutoffset:(h,v)=(0.0pt,0.0pt)
+* modes: 
+* h-part:(L,W,R)=(92.14519pt, 430.00462pt, 92.14519pt)
+* v-part:(T,H,B)=(113.81102pt, 585.7616pt, 95.39737pt)
+* \paperwidth=614.295pt
+* \paperheight=794.96999pt
+* \textwidth=430.00462pt
+* \textheight=585.7616pt
+* \oddsidemargin=19.8752pt
+* \evensidemargin=19.8752pt
+* \topmargin=-55.81723pt
+* \headheight=12.0pt
+* \headsep=85.35826pt
+* \topskip=10.0pt
+* \footskip=28.45274pt
+* \marginparwidth=65.0pt
+* \marginparsep=11.0pt
+* \columnsep=10.0pt
+* \skip\footins=9.0pt plus 4.0pt minus 2.0pt
+* \hoffset=0.0pt
+* \voffset=0.0pt
+* \mag=1000
+* \@twocolumnfalse
+* \@twosidefalse
+* \@mparswitchfalse
+* \@reversemarginfalse
+* (1in=72.27pt=25.4mm, 1cm=28.453pt)
+
+
+Underfull \hbox (badness 6316) in paragraph at lines 108--109
+ [][][] \T1/lmr/bx/n/25 Área
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 109--111
+ []\T1/lmr/bx/n/25 1[]
+ []
+
+<report_images/logo_2.png, id=20, 611.886pt x 141.52875pt>
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 129.
+(pdftex.def)             Requested size: 245.71425pt x 56.83292pt.
+[1
+
+{C:/Users/lucas/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}{d:/MiKTeX/fon
+ts/enc/dvips/lm/lm-ec.enc} <./report_images/logo_2.png>]
+Overfull \hbox (15.0pt too wide) in paragraph at lines 136--137
+[][] 
+ []
+
+LaTeX Font Info:    Trying to load font information for TS1+lmr on input line 1
+45.
+(d:\MiKTeX\tex/latex/lm\ts1lmr.fd
+File: ts1lmr.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+) [2{d:/MiKTeX/fonts/enc/dvips/lm/lm-ts1.enc}] (report.toc
+LaTeX Font Info:    Trying to load font information for OT1+lmr on input line 6
+.
+ (d:\MiKTeX\tex/latex/lm\ot1lmr.fd
+File: ot1lmr.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+)
+LaTeX Font Info:    Trying to load font information for OML+lmm on input line 6
+.
+
+(d:\MiKTeX\tex/latex/lm\omllmm.fd
+File: omllmm.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+)
+LaTeX Font Info:    Trying to load font information for OMS+lmsy on input line 
+6.
+ (d:\MiKTeX\tex/latex/lm\omslmsy.fd
+File: omslmsy.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+)
+LaTeX Font Info:    Trying to load font information for OMX+lmex on input line 
+6.
+
+(d:\MiKTeX\tex/latex/lm\omxlmex.fd
+File: omxlmex.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+)
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <10> on input line 6.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <7> on input line 6.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <5> on input line 6.
+ [3])
+\tf@toc=\write4
+\openout4 = `report.toc'.
+
+ [4]
+<report_images/ortho.png, id=42, 1457.445pt x 2867.71375pt>
+File: report_images/ortho.png Graphic file (type png)
+<use report_images/ortho.png>
+Package pdftex.def Info: report_images/ortho.png  used on input line 188.
+(pdftex.def)             Requested size: 258.00539pt x 507.63345pt.
+
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 193.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[5]
+<report_images/layer_img.pdf, id=48, 5827.7725pt x 11469.85126pt>
+File: report_images/layer_img.pdf Graphic file (type pdf)
+<use report_images/layer_img.pdf>
+Package pdftex.def Info: report_images/layer_img.pdf  used on input line 198.
+(pdftex.def)             Requested size: 258.00539pt x 507.72029pt.
+
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 203.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[6 <./report_images/ortho.png (PNG copy)>]
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 203.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[7 <./report_images/layer_img.pdf>]
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 303.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[8
+
+]
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 323.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[9]
+Underfull \hbox (badness 10000) in paragraph at lines 326--328
+
+ []
+
+<report_images/hotspots_(2-70)_layer.pdf, id=64, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(2-70)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(2-70)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(2-70)_layer.pdf  used on input
+ line 333.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(2-70)_cropped.jpg, id=65, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(2-70)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(2-70)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(2-70)_cropped.jpg  used on inp
+ut line 335.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(2-70).jpg, id=66, 642.4pt x 513.92pt>
+File: report_images/hotspots_(2-70).jpg Graphic file (type jpg)
+<use report_images/hotspots_(2-70).jpg>
+Package pdftex.def Info: report_images/hotspots_(2-70).jpg  used on input line 
+337.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+Underfull \hbox (badness 10000) in paragraph at lines 343--345
+
+ []
+
+<report_images/hotspots_(2-114)_layer.pdf, id=67, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(2-114)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(2-114)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(2-114)_layer.pdf  used on inpu
+t line 350.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(2-114)_cropped.jpg, id=68, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(2-114)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(2-114)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(2-114)_cropped.jpg  used on in
+put line 352.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(2-114).jpg, id=69, 642.4pt x 513.92pt>
+File: report_images/hotspots_(2-114).jpg Graphic file (type jpg)
+<use report_images/hotspots_(2-114).jpg>
+Package pdftex.def Info: report_images/hotspots_(2-114).jpg  used on input line
+ 354.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 359.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[10
+
+ <./report_images/hotspots_(2-70)_layer.pdf> <./report_images/hotspots_(2-70)_c
+ropped.jpg> <./report_images/hotspots_(2-70).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 360--362
+
+ []
+
+<report_images/hotspots_(2-118)_layer.pdf, id=76, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(2-118)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(2-118)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(2-118)_layer.pdf  used on inpu
+t line 367.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(2-118)_cropped.jpg, id=77, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(2-118)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(2-118)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(2-118)_cropped.jpg  used on in
+put line 369.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(2-118).jpg, id=78, 642.4pt x 513.92pt>
+File: report_images/hotspots_(2-118).jpg Graphic file (type jpg)
+<use report_images/hotspots_(2-118).jpg>
+Package pdftex.def Info: report_images/hotspots_(2-118).jpg  used on input line
+ 371.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 376.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[11 <./report_images/hotspots_(2-114)_layer.pdf> <./report_images/hotspots_(2-1
+14)_cropped.jpg> <./report_images/hotspots_(2-114).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 377--379
+
+ []
+
+<report_images/hotspots_(4-109)_layer.pdf, id=84, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(4-109)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(4-109)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(4-109)_layer.pdf  used on inpu
+t line 384.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(4-109)_cropped.jpg, id=85, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(4-109)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(4-109)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(4-109)_cropped.jpg  used on in
+put line 386.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(4-109).jpg, id=86, 642.4pt x 513.92pt>
+File: report_images/hotspots_(4-109).jpg Graphic file (type jpg)
+<use report_images/hotspots_(4-109).jpg>
+Package pdftex.def Info: report_images/hotspots_(4-109).jpg  used on input line
+ 388.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 393.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[12 <./report_images/hotspots_(2-118)_layer.pdf> <./report_images/hotspots_(2-1
+18)_cropped.jpg> <./report_images/hotspots_(2-118).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 394--396
+
+ []
+
+<report_images/hotspots_(4-122)_layer.pdf, id=92, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(4-122)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(4-122)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(4-122)_layer.pdf  used on inpu
+t line 401.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(4-122)_cropped.jpg, id=93, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(4-122)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(4-122)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(4-122)_cropped.jpg  used on in
+put line 403.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(4-122).jpg, id=94, 642.4pt x 513.92pt>
+File: report_images/hotspots_(4-122).jpg Graphic file (type jpg)
+<use report_images/hotspots_(4-122).jpg>
+Package pdftex.def Info: report_images/hotspots_(4-122).jpg  used on input line
+ 405.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 410.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[13 <./report_images/hotspots_(4-109)_layer.pdf> <./report_images/hotspots_(4-1
+09)_cropped.jpg> <./report_images/hotspots_(4-109).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 411--413
+
+ []
+
+<report_images/hotspots_(5-96)_layer.pdf, id=101, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(5-96)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(5-96)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(5-96)_layer.pdf  used on input
+ line 418.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(5-96)_cropped.jpg, id=102, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(5-96)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(5-96)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(5-96)_cropped.jpg  used on inp
+ut line 420.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(5-96).jpg, id=103, 642.4pt x 513.92pt>
+File: report_images/hotspots_(5-96).jpg Graphic file (type jpg)
+<use report_images/hotspots_(5-96).jpg>
+Package pdftex.def Info: report_images/hotspots_(5-96).jpg  used on input line 
+422.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 427.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[14 <./report_images/hotspots_(4-122)_layer.pdf> <./report_images/hotspots_(4-1
+22)_cropped.jpg> <./report_images/hotspots_(4-122).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 428--430
+
+ []
+
+<report_images/hotspots_(5-97)_layer.pdf, id=109, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(5-97)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(5-97)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(5-97)_layer.pdf  used on input
+ line 435.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(5-97)_cropped.jpg, id=110, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(5-97)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(5-97)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(5-97)_cropped.jpg  used on inp
+ut line 437.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(5-97).jpg, id=111, 642.4pt x 513.92pt>
+File: report_images/hotspots_(5-97).jpg Graphic file (type jpg)
+<use report_images/hotspots_(5-97).jpg>
+Package pdftex.def Info: report_images/hotspots_(5-97).jpg  used on input line 
+439.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 444.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[15 <./report_images/hotspots_(5-96)_layer.pdf> <./report_images/hotspots_(5-96
+)_cropped.jpg> <./report_images/hotspots_(5-96).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 445--447
+
+ []
+
+<report_images/hotspots_(5-98)_layer.pdf, id=117, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(5-98)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(5-98)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(5-98)_layer.pdf  used on input
+ line 452.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(5-98)_cropped.jpg, id=118, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(5-98)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(5-98)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(5-98)_cropped.jpg  used on inp
+ut line 454.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(5-98).jpg, id=119, 642.4pt x 513.92pt>
+File: report_images/hotspots_(5-98).jpg Graphic file (type jpg)
+<use report_images/hotspots_(5-98).jpg>
+Package pdftex.def Info: report_images/hotspots_(5-98).jpg  used on input line 
+456.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 461.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[16 <./report_images/hotspots_(5-97)_layer.pdf> <./report_images/hotspots_(5-97
+)_cropped.jpg> <./report_images/hotspots_(5-97).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 462--464
+
+ []
+
+<report_images/hotspots_(5-104)_layer.pdf, id=125, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(5-104)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(5-104)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(5-104)_layer.pdf  used on inpu
+t line 469.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(5-104)_cropped.jpg, id=126, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(5-104)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(5-104)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(5-104)_cropped.jpg  used on in
+put line 471.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(5-104).jpg, id=127, 642.4pt x 513.92pt>
+File: report_images/hotspots_(5-104).jpg Graphic file (type jpg)
+<use report_images/hotspots_(5-104).jpg>
+Package pdftex.def Info: report_images/hotspots_(5-104).jpg  used on input line
+ 473.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 478.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[17 <./report_images/hotspots_(5-98)_layer.pdf> <./report_images/hotspots_(5-98
+)_cropped.jpg> <./report_images/hotspots_(5-98).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 479--481
+
+ []
+
+<report_images/hotspots_(5-114)_layer.pdf, id=133, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(5-114)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(5-114)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(5-114)_layer.pdf  used on inpu
+t line 486.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(5-114)_cropped.jpg, id=134, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(5-114)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(5-114)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(5-114)_cropped.jpg  used on in
+put line 488.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(5-114).jpg, id=135, 642.4pt x 513.92pt>
+File: report_images/hotspots_(5-114).jpg Graphic file (type jpg)
+<use report_images/hotspots_(5-114).jpg>
+Package pdftex.def Info: report_images/hotspots_(5-114).jpg  used on input line
+ 490.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 495.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[18 <./report_images/hotspots_(5-104)_layer.pdf> <./report_images/hotspots_(5-1
+04)_cropped.jpg> <./report_images/hotspots_(5-104).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 496--498
+
+ []
+
+<report_images/hotspots_(5-115)_layer.pdf, id=141, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(5-115)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(5-115)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(5-115)_layer.pdf  used on inpu
+t line 503.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(5-115)_cropped.jpg, id=142, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(5-115)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(5-115)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(5-115)_cropped.jpg  used on in
+put line 505.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(5-115).jpg, id=143, 642.4pt x 513.92pt>
+File: report_images/hotspots_(5-115).jpg Graphic file (type jpg)
+<use report_images/hotspots_(5-115).jpg>
+Package pdftex.def Info: report_images/hotspots_(5-115).jpg  used on input line
+ 507.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 512.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[19 <./report_images/hotspots_(5-114)_layer.pdf> <./report_images/hotspots_(5-1
+14)_cropped.jpg> <./report_images/hotspots_(5-114).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 513--515
+
+ []
+
+<report_images/hotspots_(6-22)_layer.pdf, id=150, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(6-22)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(6-22)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(6-22)_layer.pdf  used on input
+ line 520.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(6-22)_cropped.jpg, id=151, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(6-22)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(6-22)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(6-22)_cropped.jpg  used on inp
+ut line 522.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(6-22).jpg, id=152, 642.4pt x 513.92pt>
+File: report_images/hotspots_(6-22).jpg Graphic file (type jpg)
+<use report_images/hotspots_(6-22).jpg>
+Package pdftex.def Info: report_images/hotspots_(6-22).jpg  used on input line 
+524.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 529.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[20 <./report_images/hotspots_(5-115)_layer.pdf> <./report_images/hotspots_(5-1
+15)_cropped.jpg> <./report_images/hotspots_(5-115).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 530--532
+
+ []
+
+<report_images/hotspots_(6-68)_layer.pdf, id=158, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(6-68)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(6-68)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(6-68)_layer.pdf  used on input
+ line 537.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(6-68)_cropped.jpg, id=159, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(6-68)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(6-68)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(6-68)_cropped.jpg  used on inp
+ut line 539.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(6-68).jpg, id=160, 642.4pt x 513.92pt>
+File: report_images/hotspots_(6-68).jpg Graphic file (type jpg)
+<use report_images/hotspots_(6-68).jpg>
+Package pdftex.def Info: report_images/hotspots_(6-68).jpg  used on input line 
+541.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 546.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[21 <./report_images/hotspots_(6-22)_layer.pdf> <./report_images/hotspots_(6-22
+)_cropped.jpg> <./report_images/hotspots_(6-22).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 547--549
+
+ []
+
+<report_images/hotspots_(6-78)_layer.pdf, id=166, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(6-78)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(6-78)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(6-78)_layer.pdf  used on input
+ line 554.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(6-78)_cropped.jpg, id=167, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(6-78)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(6-78)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(6-78)_cropped.jpg  used on inp
+ut line 556.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(6-78).jpg, id=168, 642.4pt x 513.92pt>
+File: report_images/hotspots_(6-78).jpg Graphic file (type jpg)
+<use report_images/hotspots_(6-78).jpg>
+Package pdftex.def Info: report_images/hotspots_(6-78).jpg  used on input line 
+558.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 563.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[22 <./report_images/hotspots_(6-68)_layer.pdf> <./report_images/hotspots_(6-68
+)_cropped.jpg> <./report_images/hotspots_(6-68).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 564--566
+
+ []
+
+<report_images/hotspots_(6-105)_layer.pdf, id=174, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(6-105)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(6-105)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(6-105)_layer.pdf  used on inpu
+t line 571.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(6-105)_cropped.jpg, id=175, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(6-105)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(6-105)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(6-105)_cropped.jpg  used on in
+put line 573.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(6-105).jpg, id=176, 642.4pt x 513.92pt>
+File: report_images/hotspots_(6-105).jpg Graphic file (type jpg)
+<use report_images/hotspots_(6-105).jpg>
+Package pdftex.def Info: report_images/hotspots_(6-105).jpg  used on input line
+ 575.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 580.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[23 <./report_images/hotspots_(6-78)_layer.pdf> <./report_images/hotspots_(6-78
+)_cropped.jpg> <./report_images/hotspots_(6-78).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 581--583
+
+ []
+
+<report_images/hotspots_(6-106)_layer.pdf, id=182, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(6-106)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(6-106)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(6-106)_layer.pdf  used on inpu
+t line 588.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(6-106)_cropped.jpg, id=183, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(6-106)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(6-106)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(6-106)_cropped.jpg  used on in
+put line 590.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(6-106).jpg, id=184, 642.4pt x 513.92pt>
+File: report_images/hotspots_(6-106).jpg Graphic file (type jpg)
+<use report_images/hotspots_(6-106).jpg>
+Package pdftex.def Info: report_images/hotspots_(6-106).jpg  used on input line
+ 592.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 597.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[24 <./report_images/hotspots_(6-105)_layer.pdf> <./report_images/hotspots_(6-1
+05)_cropped.jpg> <./report_images/hotspots_(6-105).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 598--600
+
+ []
+
+<report_images/hotspots_(7-15)_layer.pdf, id=190, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(7-15)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(7-15)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(7-15)_layer.pdf  used on input
+ line 605.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(7-15)_cropped.jpg, id=191, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(7-15)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(7-15)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(7-15)_cropped.jpg  used on inp
+ut line 607.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(7-15).jpg, id=192, 642.4pt x 513.92pt>
+File: report_images/hotspots_(7-15).jpg Graphic file (type jpg)
+<use report_images/hotspots_(7-15).jpg>
+Package pdftex.def Info: report_images/hotspots_(7-15).jpg  used on input line 
+609.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 614.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[25 <./report_images/hotspots_(6-106)_layer.pdf> <./report_images/hotspots_(6-1
+06)_cropped.jpg> <./report_images/hotspots_(6-106).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 615--617
+
+ []
+
+<report_images/hotspots_(7-63)_layer.pdf, id=199, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(7-63)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(7-63)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(7-63)_layer.pdf  used on input
+ line 622.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(7-63)_cropped.jpg, id=200, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(7-63)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(7-63)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(7-63)_cropped.jpg  used on inp
+ut line 624.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(7-63).jpg, id=201, 642.4pt x 513.92pt>
+File: report_images/hotspots_(7-63).jpg Graphic file (type jpg)
+<use report_images/hotspots_(7-63).jpg>
+Package pdftex.def Info: report_images/hotspots_(7-63).jpg  used on input line 
+626.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 631.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[26 <./report_images/hotspots_(7-15)_layer.pdf> <./report_images/hotspots_(7-15
+)_cropped.jpg> <./report_images/hotspots_(7-15).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 632--634
+
+ []
+
+<report_images/hotspots_(7-97)_layer.pdf, id=207, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(7-97)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(7-97)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(7-97)_layer.pdf  used on input
+ line 639.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(7-97)_cropped.jpg, id=208, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(7-97)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(7-97)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(7-97)_cropped.jpg  used on inp
+ut line 641.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(7-97).jpg, id=209, 642.4pt x 513.92pt>
+File: report_images/hotspots_(7-97).jpg Graphic file (type jpg)
+<use report_images/hotspots_(7-97).jpg>
+Package pdftex.def Info: report_images/hotspots_(7-97).jpg  used on input line 
+643.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 648.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[27 <./report_images/hotspots_(7-63)_layer.pdf> <./report_images/hotspots_(7-63
+)_cropped.jpg> <./report_images/hotspots_(7-63).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 649--651
+
+ []
+
+<report_images/hotspots_(7-120)_layer.pdf, id=215, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(7-120)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(7-120)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(7-120)_layer.pdf  used on inpu
+t line 656.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(7-120)_cropped.jpg, id=216, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(7-120)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(7-120)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(7-120)_cropped.jpg  used on in
+put line 658.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(7-120).jpg, id=217, 642.4pt x 513.92pt>
+File: report_images/hotspots_(7-120).jpg Graphic file (type jpg)
+<use report_images/hotspots_(7-120).jpg>
+Package pdftex.def Info: report_images/hotspots_(7-120).jpg  used on input line
+ 660.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 665.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[28 <./report_images/hotspots_(7-97)_layer.pdf> <./report_images/hotspots_(7-97
+)_cropped.jpg> <./report_images/hotspots_(7-97).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 666--668
+
+ []
+
+<report_images/hotspots_(8-35)_layer.pdf, id=223, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(8-35)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(8-35)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(8-35)_layer.pdf  used on input
+ line 673.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(8-35)_cropped.jpg, id=224, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(8-35)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(8-35)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(8-35)_cropped.jpg  used on inp
+ut line 675.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(8-35).jpg, id=225, 642.4pt x 513.92pt>
+File: report_images/hotspots_(8-35).jpg Graphic file (type jpg)
+<use report_images/hotspots_(8-35).jpg>
+Package pdftex.def Info: report_images/hotspots_(8-35).jpg  used on input line 
+677.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 682.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[29 <./report_images/hotspots_(7-120)_layer.pdf> <./report_images/hotspots_(7-1
+20)_cropped.jpg> <./report_images/hotspots_(7-120).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 683--685
+
+ []
+
+<report_images/hotspots_(8-36)_layer.pdf, id=231, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(8-36)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(8-36)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(8-36)_layer.pdf  used on input
+ line 690.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(8-36)_cropped.jpg, id=232, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(8-36)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(8-36)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(8-36)_cropped.jpg  used on inp
+ut line 692.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(8-36).jpg, id=233, 642.4pt x 513.92pt>
+File: report_images/hotspots_(8-36).jpg Graphic file (type jpg)
+<use report_images/hotspots_(8-36).jpg>
+Package pdftex.def Info: report_images/hotspots_(8-36).jpg  used on input line 
+694.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 699.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[30 <./report_images/hotspots_(8-35)_layer.pdf> <./report_images/hotspots_(8-35
+)_cropped.jpg> <./report_images/hotspots_(8-35).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 700--702
+
+ []
+
+<report_images/hotspots_(8-37)_layer.pdf, id=239, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(8-37)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(8-37)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(8-37)_layer.pdf  used on input
+ line 707.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(8-37)_cropped.jpg, id=240, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(8-37)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(8-37)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(8-37)_cropped.jpg  used on inp
+ut line 709.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(8-37).jpg, id=241, 642.4pt x 513.92pt>
+File: report_images/hotspots_(8-37).jpg Graphic file (type jpg)
+<use report_images/hotspots_(8-37).jpg>
+Package pdftex.def Info: report_images/hotspots_(8-37).jpg  used on input line 
+711.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 716.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[31 <./report_images/hotspots_(8-36)_layer.pdf> <./report_images/hotspots_(8-36
+)_cropped.jpg> <./report_images/hotspots_(8-36).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 717--719
+
+ []
+
+<report_images/hotspots_(8-117)_layer.pdf, id=248, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(8-117)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(8-117)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(8-117)_layer.pdf  used on inpu
+t line 724.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(8-117)_cropped.jpg, id=249, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(8-117)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(8-117)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(8-117)_cropped.jpg  used on in
+put line 726.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(8-117).jpg, id=250, 642.4pt x 513.92pt>
+File: report_images/hotspots_(8-117).jpg Graphic file (type jpg)
+<use report_images/hotspots_(8-117).jpg>
+Package pdftex.def Info: report_images/hotspots_(8-117).jpg  used on input line
+ 728.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 733.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[32 <./report_images/hotspots_(8-37)_layer.pdf> <./report_images/hotspots_(8-37
+)_cropped.jpg> <./report_images/hotspots_(8-37).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 734--736
+
+ []
+
+<report_images/hotspots_(8-122)_layer.pdf, id=256, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(8-122)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(8-122)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(8-122)_layer.pdf  used on inpu
+t line 741.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(8-122)_cropped.jpg, id=257, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(8-122)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(8-122)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(8-122)_cropped.jpg  used on in
+put line 743.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(8-122).jpg, id=258, 642.4pt x 513.92pt>
+File: report_images/hotspots_(8-122).jpg Graphic file (type jpg)
+<use report_images/hotspots_(8-122).jpg>
+Package pdftex.def Info: report_images/hotspots_(8-122).jpg  used on input line
+ 745.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 750.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[33 <./report_images/hotspots_(8-117)_layer.pdf> <./report_images/hotspots_(8-1
+17)_cropped.jpg> <./report_images/hotspots_(8-117).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 751--753
+
+ []
+
+<report_images/hotspots_(9-43)_layer.pdf, id=264, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(9-43)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(9-43)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(9-43)_layer.pdf  used on input
+ line 758.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(9-43)_cropped.jpg, id=265, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(9-43)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(9-43)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(9-43)_cropped.jpg  used on inp
+ut line 760.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(9-43).jpg, id=266, 642.4pt x 513.92pt>
+File: report_images/hotspots_(9-43).jpg Graphic file (type jpg)
+<use report_images/hotspots_(9-43).jpg>
+Package pdftex.def Info: report_images/hotspots_(9-43).jpg  used on input line 
+762.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 767.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[34 <./report_images/hotspots_(8-122)_layer.pdf> <./report_images/hotspots_(8-1
+22)_cropped.jpg> <./report_images/hotspots_(8-122).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 768--770
+
+ []
+
+<report_images/hotspots_(9-92)_layer.pdf, id=272, 5827.7725pt x 11469.85126pt>
+File: report_images/hotspots_(9-92)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(9-92)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(9-92)_layer.pdf  used on input
+ line 775.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(9-92)_cropped.jpg, id=273, 318.18875pt x 318.18875pt>
+File: report_images/hotspots_(9-92)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(9-92)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(9-92)_cropped.jpg  used on inp
+ut line 777.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(9-92).jpg, id=274, 642.4pt x 513.92pt>
+File: report_images/hotspots_(9-92).jpg Graphic file (type jpg)
+<use report_images/hotspots_(9-92).jpg>
+Package pdftex.def Info: report_images/hotspots_(9-92).jpg  used on input line 
+779.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 784.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[35 <./report_images/hotspots_(9-43)_layer.pdf> <./report_images/hotspots_(9-43
+)_cropped.jpg> <./report_images/hotspots_(9-43).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 785--787
+
+ []
+
+<report_images/hotspots_(10-53)_layer.pdf, id=280, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(10-53)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(10-53)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(10-53)_layer.pdf  used on inpu
+t line 792.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(10-53)_cropped.jpg, id=281, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(10-53)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(10-53)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(10-53)_cropped.jpg  used on in
+put line 794.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(10-53).jpg, id=282, 642.4pt x 513.92pt>
+File: report_images/hotspots_(10-53).jpg Graphic file (type jpg)
+<use report_images/hotspots_(10-53).jpg>
+Package pdftex.def Info: report_images/hotspots_(10-53).jpg  used on input line
+ 796.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 801.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[36 <./report_images/hotspots_(9-92)_layer.pdf> <./report_images/hotspots_(9-92
+)_cropped.jpg> <./report_images/hotspots_(9-92).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 802--804
+
+ []
+
+<report_images/hotspots_(11-61)_layer.pdf, id=288, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(11-61)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(11-61)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(11-61)_layer.pdf  used on inpu
+t line 809.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(11-61)_cropped.jpg, id=289, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(11-61)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(11-61)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(11-61)_cropped.jpg  used on in
+put line 811.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(11-61).jpg, id=290, 642.4pt x 513.92pt>
+File: report_images/hotspots_(11-61).jpg Graphic file (type jpg)
+<use report_images/hotspots_(11-61).jpg>
+Package pdftex.def Info: report_images/hotspots_(11-61).jpg  used on input line
+ 813.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 818.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[37 <./report_images/hotspots_(10-53)_layer.pdf> <./report_images/hotspots_(10-
+53)_cropped.jpg> <./report_images/hotspots_(10-53).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 819--821
+
+ []
+
+<report_images/hotspots_(12-22)_layer.pdf, id=297, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(12-22)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(12-22)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(12-22)_layer.pdf  used on inpu
+t line 826.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(12-22)_cropped.jpg, id=298, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(12-22)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(12-22)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(12-22)_cropped.jpg  used on in
+put line 828.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(12-22).jpg, id=299, 642.4pt x 513.92pt>
+File: report_images/hotspots_(12-22).jpg Graphic file (type jpg)
+<use report_images/hotspots_(12-22).jpg>
+Package pdftex.def Info: report_images/hotspots_(12-22).jpg  used on input line
+ 830.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 835.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[38 <./report_images/hotspots_(11-61)_layer.pdf> <./report_images/hotspots_(11-
+61)_cropped.jpg> <./report_images/hotspots_(11-61).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 836--838
+
+ []
+
+<report_images/hotspots_(12-56)_layer.pdf, id=305, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(12-56)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(12-56)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(12-56)_layer.pdf  used on inpu
+t line 843.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(12-56)_cropped.jpg, id=306, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(12-56)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(12-56)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(12-56)_cropped.jpg  used on in
+put line 845.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(12-56).jpg, id=307, 642.4pt x 513.92pt>
+File: report_images/hotspots_(12-56).jpg Graphic file (type jpg)
+<use report_images/hotspots_(12-56).jpg>
+Package pdftex.def Info: report_images/hotspots_(12-56).jpg  used on input line
+ 847.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 852.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[39 <./report_images/hotspots_(12-22)_layer.pdf> <./report_images/hotspots_(12-
+22)_cropped.jpg> <./report_images/hotspots_(12-22).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 853--855
+
+ []
+
+<report_images/hotspots_(12-61)_layer.pdf, id=313, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(12-61)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(12-61)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(12-61)_layer.pdf  used on inpu
+t line 860.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(12-61)_cropped.jpg, id=314, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(12-61)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(12-61)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(12-61)_cropped.jpg  used on in
+put line 862.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(12-61).jpg, id=315, 642.4pt x 513.92pt>
+File: report_images/hotspots_(12-61).jpg Graphic file (type jpg)
+<use report_images/hotspots_(12-61).jpg>
+Package pdftex.def Info: report_images/hotspots_(12-61).jpg  used on input line
+ 864.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 869.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[40 <./report_images/hotspots_(12-56)_layer.pdf> <./report_images/hotspots_(12-
+56)_cropped.jpg> <./report_images/hotspots_(12-56).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 870--872
+
+ []
+
+<report_images/hotspots_(13-10)_layer.pdf, id=321, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(13-10)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(13-10)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(13-10)_layer.pdf  used on inpu
+t line 877.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(13-10)_cropped.jpg, id=322, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(13-10)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-10)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(13-10)_cropped.jpg  used on in
+put line 879.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(13-10).jpg, id=323, 642.4pt x 513.92pt>
+File: report_images/hotspots_(13-10).jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-10).jpg>
+Package pdftex.def Info: report_images/hotspots_(13-10).jpg  used on input line
+ 881.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 886.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[41 <./report_images/hotspots_(12-61)_layer.pdf> <./report_images/hotspots_(12-
+61)_cropped.jpg> <./report_images/hotspots_(12-61).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 887--889
+
+ []
+
+<report_images/hotspots_(13-16)_layer.pdf, id=329, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(13-16)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(13-16)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(13-16)_layer.pdf  used on inpu
+t line 894.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(13-16)_cropped.jpg, id=330, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(13-16)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-16)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(13-16)_cropped.jpg  used on in
+put line 896.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(13-16).jpg, id=331, 642.4pt x 513.92pt>
+File: report_images/hotspots_(13-16).jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-16).jpg>
+Package pdftex.def Info: report_images/hotspots_(13-16).jpg  used on input line
+ 898.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 903.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[42 <./report_images/hotspots_(13-10)_layer.pdf> <./report_images/hotspots_(13-
+10)_cropped.jpg> <./report_images/hotspots_(13-10).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 904--906
+
+ []
+
+<report_images/hotspots_(13-18)_layer.pdf, id=337, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(13-18)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(13-18)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(13-18)_layer.pdf  used on inpu
+t line 911.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(13-18)_cropped.jpg, id=338, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(13-18)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-18)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(13-18)_cropped.jpg  used on in
+put line 913.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(13-18).jpg, id=339, 642.4pt x 513.92pt>
+File: report_images/hotspots_(13-18).jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-18).jpg>
+Package pdftex.def Info: report_images/hotspots_(13-18).jpg  used on input line
+ 915.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 920.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[43 <./report_images/hotspots_(13-16)_layer.pdf> <./report_images/hotspots_(13-
+16)_cropped.jpg> <./report_images/hotspots_(13-16).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 921--923
+
+ []
+
+<report_images/hotspots_(13-55)_layer.pdf, id=346, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(13-55)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(13-55)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(13-55)_layer.pdf  used on inpu
+t line 928.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(13-55)_cropped.jpg, id=347, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(13-55)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-55)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(13-55)_cropped.jpg  used on in
+put line 930.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(13-55).jpg, id=348, 642.4pt x 513.92pt>
+File: report_images/hotspots_(13-55).jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-55).jpg>
+Package pdftex.def Info: report_images/hotspots_(13-55).jpg  used on input line
+ 932.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 937.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[44 <./report_images/hotspots_(13-18)_layer.pdf> <./report_images/hotspots_(13-
+18)_cropped.jpg> <./report_images/hotspots_(13-18).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 938--940
+
+ []
+
+<report_images/hotspots_(13-56)_layer.pdf, id=354, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(13-56)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(13-56)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(13-56)_layer.pdf  used on inpu
+t line 945.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(13-56)_cropped.jpg, id=355, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(13-56)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-56)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(13-56)_cropped.jpg  used on in
+put line 947.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(13-56).jpg, id=356, 642.4pt x 513.92pt>
+File: report_images/hotspots_(13-56).jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-56).jpg>
+Package pdftex.def Info: report_images/hotspots_(13-56).jpg  used on input line
+ 949.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 954.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[45 <./report_images/hotspots_(13-55)_layer.pdf> <./report_images/hotspots_(13-
+55)_cropped.jpg> <./report_images/hotspots_(13-55).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 955--957
+
+ []
+
+<report_images/hotspots_(13-60)_layer.pdf, id=362, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(13-60)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(13-60)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(13-60)_layer.pdf  used on inpu
+t line 962.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(13-60)_cropped.jpg, id=363, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(13-60)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-60)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(13-60)_cropped.jpg  used on in
+put line 964.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(13-60).jpg, id=364, 642.4pt x 513.92pt>
+File: report_images/hotspots_(13-60).jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-60).jpg>
+Package pdftex.def Info: report_images/hotspots_(13-60).jpg  used on input line
+ 966.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 971.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[46 <./report_images/hotspots_(13-56)_layer.pdf> <./report_images/hotspots_(13-
+56)_cropped.jpg> <./report_images/hotspots_(13-56).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 972--974
+
+ []
+
+<report_images/hotspots_(13-62)_layer.pdf, id=370, 5827.7725pt x 11469.85126pt>
+
+File: report_images/hotspots_(13-62)_layer.pdf Graphic file (type pdf)
+<use report_images/hotspots_(13-62)_layer.pdf>
+Package pdftex.def Info: report_images/hotspots_(13-62)_layer.pdf  used on inpu
+t line 979.
+(pdftex.def)             Requested size: 133.30037pt x 262.3484pt.
+<report_images/hotspots_(13-62)_cropped.jpg, id=371, 318.18875pt x 318.18875pt>
+
+File: report_images/hotspots_(13-62)_cropped.jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-62)_cropped.jpg>
+Package pdftex.def Info: report_images/hotspots_(13-62)_cropped.jpg  used on in
+put line 981.
+(pdftex.def)             Requested size: 133.30037pt x 133.2985pt.
+<report_images/hotspots_(13-62).jpg, id=372, 642.4pt x 513.92pt>
+File: report_images/hotspots_(13-62).jpg Graphic file (type jpg)
+<use report_images/hotspots_(13-62).jpg>
+Package pdftex.def Info: report_images/hotspots_(13-62).jpg  used on input line
+ 983.
+(pdftex.def)             Requested size: 133.30037pt x 106.64032pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 988.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[47 <./report_images/hotspots_(13-60)_layer.pdf> <./report_images/hotspots_(13-
+60)_cropped.jpg> <./report_images/hotspots_(13-60).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 989--991
+
+ []
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 991.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[48 <./report_images/hotspots_(13-62)_layer.pdf> <./report_images/hotspots_(13-
+62)_cropped.jpg> <./report_images/hotspots_(13-62).jpg>]
+Underfull \hbox (badness 10000) in paragraph at lines 993--995
+
+ []
+
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 995.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[49]
+Underfull \hbox (badness 10000) in paragraph at lines 997--999
+
+ []
+
+
+AED: lastpage setting LastPage
+File: report_images/logo_2.png Graphic file (type png)
+<use report_images/logo_2.png>
+Package pdftex.def Info: report_images/logo_2.png  used on input line 999.
+(pdftex.def)             Requested size: 61.43324pt x 14.20769pt.
+
+Package fancyhdr Warning: \headheight is too small (12.0pt): 
+(fancyhdr)                Make it at least 17.80772pt, for example:
+(fancyhdr)                \setlength{\headheight}{17.80772pt}.
+(fancyhdr)                You might also make \topmargin smaller:
+(fancyhdr)                \addtolength{\topmargin}{-5.80772pt}.
+
+[50] (report.aux)
+ ***********
+LaTeX2e <2023-11-01> patch level 1
+L3 programming layer <2024-01-04>
+ ***********
+ ) 
+Here is how much of TeX's memory you used:
+ 17552 strings out of 474486
+ 370600 string characters out of 5760170
+ 1945542 words of memory out of 5000000
+ 39520 multiletter control sequences out of 15000+600000
+ 615601 words of font info for 64 fonts, out of 8000000 for 9000
+ 1141 hyphenation exceptions out of 8191
+ 93i,15n,113p,1248b,696s stack positions out of 10000i,1000n,20000p,200000b,200000s
+<d:/MiKTeX/fonts/type1/public/lm/lmbx10.pfb><d:/MiKTeX/fonts/type1/public/lm/
+lmbx12.pfb><d:/MiKTeX/fonts/type1/public/lm/lmbx9.pfb><d:/MiKTeX/fonts/type1/pu
+blic/lm/lmr10.pfb><d:/MiKTeX/fonts/type1/public/lm/lmr17.pfb><d:/MiKTeX/fonts/t
+ype1/public/lm/lmr8.pfb><d:/MiKTeX/fonts/type1/public/lm/lmr9.pfb>
+Output written on report.pdf (50 pages, 13359290 bytes).
+PDF statistics:
+ 428 PDF objects out of 1000 (max. 8388607)
+ 0 named destinations out of 1000 (max. 500000)
+ 661 words of extra memory for PDF output out of 10000 (max. 10000000)
+
