@@ -63,6 +63,11 @@ def crop_defect_regions(
             # Crop region
             cropped = ortho_img[y1:y2, x1:x2]
 
+            # Skip if crop is empty (can happen at image edges)
+            if cropped.size == 0 or cropped.shape[0] == 0 or cropped.shape[1] == 0:
+                logger.warning(f"Skipping empty crop for panel {panel.panel_id}, bounds: ({x1},{y1})-({x2},{y2})")
+                continue
+
             # Downscale
             cropped = cv2.resize(
                 cropped, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA

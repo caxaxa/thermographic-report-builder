@@ -8,7 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy and install Python dependencies
 WORKDIR /build
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip wheel --no-cache-dir --wheel-dir /build/wheels .
 
@@ -27,7 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Ghostscript for PDF compression
     ghostscript \
     # OpenCV dependencies (minimal)
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
@@ -47,6 +48,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Copy application code
 COPY src/ /app/src/
+COPY pyproject.toml README.md /app/
 
 # Install package in editable mode
 RUN pip install --no-cache-dir -e .
