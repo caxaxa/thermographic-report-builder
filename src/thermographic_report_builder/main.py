@@ -41,6 +41,14 @@ def main() -> int:
         images_dir.mkdir(exist_ok=True)
         raw_images_dir.mkdir(exist_ok=True)
 
+        # Copy static assets (logo) to images directory
+        import shutil
+        assets_dir = Path(__file__).parent / "assets"
+        logo_src = assets_dir / "aisol_logo.png"
+        if logo_src.exists():
+            shutil.copy(logo_src, images_dir / "aisol_logo.png")
+            logger.info(f"Copied logo to {images_dir / 'aisol_logo.png'}")
+
         # ===== STEP 1: Download inputs from S3 =====
         logger.info("=" * 80)
         logger.info("STEP 1: Downloading inputs from S3")
@@ -123,9 +131,32 @@ def main() -> int:
         )
         logger.info(f"Matched {matched_count} raw images")
 
-        # ===== STEP 8: Generate PDF report =====
+        # ===== STEP 7.5: Download ODM statistics (optional) =====
         logger.info("=" * 80)
-        logger.info("STEP 8: Generating PDF report")
+        logger.info("STEP 7.5: Downloading ODM statistics (optional)")
+        logger.info("=" * 80)
+
+        odm_stats_dir = work_dir / "odm_stats"
+        odm_stats = None
+        try:
+            s3_client.download_odm_stats(odm_stats_dir)
+
+            # Try to load stats.json if it exists
+            stats_json_path = odm_stats_dir / "stats.json"
+            if stats_json_path.exists():
+                import json
+                with open(stats_json_path, 'r') as f:
+                    odm_stats = json.load(f)
+                logger.info("ODM stats loaded successfully")
+            else:
+                logger.warning("stats.json not found in ODM stats directory")
+        except Exception as e:
+            logger.warning(f"Could not download ODM stats (will continue without appendix): {e}")
+            odm_stats = None
+
+        # ===== STEP 8: Generate LaTeX report =====
+        logger.info("=" * 80)
+        logger.info("STEP 8: Generating LaTeX report")
         logger.info("=" * 80)
 
         report_config = ReportConfig(
@@ -137,17 +168,16 @@ def main() -> int:
             address=settings.address,
         )
 
-        builder = ReportBuilder(panel_grid=panel_grid, images_dir=images_dir, config=report_config)
+        builder = ReportBuilder(
+            panel_grid=panel_grid,
+            images_dir=images_dir,
+            config=report_config,
+            odm_stats=odm_stats,
+            odm_stats_dir=odm_stats_dir,
+        )
 
-        pdf_full_path = work_dir / "report-full.pdf"
-        builder.generate_pdf(pdf_full_path)
-
-        # Generate low-res version
-        if settings.generate_lowres_pdf:
-            pdf_lowres_path = work_dir / "report-lowres.pdf"
-            builder.generate_lowres_pdf(pdf_lowres_path, pdf_full_path)
-        else:
-            pdf_lowres_path = pdf_full_path
+        tex_path = work_dir / "report.tex"
+        builder.generate_tex(tex_path)
 
         # ===== STEP 9: Export metrics =====
         logger.info("=" * 80)
@@ -157,26 +187,29 @@ def main() -> int:
         metrics_json_path = export_metrics_json(panel_grid, work_dir / "metrics.json")
         metrics_csv_path = export_metrics_csv(panel_grid, work_dir / "metrics.csv")
 
-        # ===== STEP 10: Upload outputs to S3 =====
+        # ===== STEP 10: Upload LaTeX bundle and metrics to S3 =====
         logger.info("=" * 80)
-        logger.info("STEP 10: Uploading outputs to S3")
+        logger.info("STEP 10: Uploading LaTeX bundle and metrics to S3")
         logger.info("=" * 80)
 
-        report_full_s3 = s3_client.upload_report(pdf_full_path, "report-full.pdf")
-        report_lowres_s3 = s3_client.upload_report(pdf_lowres_path, "report-lowres.pdf")
+        # Upload the complete LaTeX bundle (tex + images) for compilation
+        tex_bundle_s3 = s3_client.upload_tex_bundle(work_dir)
+
+        # Upload metrics
         metrics_json_s3 = s3_client.upload_report(metrics_json_path, "metrics.json")
         metrics_csv_s3 = s3_client.upload_report(metrics_csv_path, "metrics.csv")
 
         # ===== Success! =====
         duration = time.time() - start_time
         logger.info("=" * 80)
-        logger.info(f"✅ Report generation completed successfully in {duration:.1f}s")
+        logger.info(f"✅ Report data processing completed successfully in {duration:.1f}s")
+        logger.info(f"LaTeX bundle ready at: {tex_bundle_s3}")
         logger.info("=" * 80)
 
         # Create job output summary
         job_output = JobOutput(
-            report_full_pdf_s3=report_full_s3,
-            report_lowres_pdf_s3=report_lowres_s3,
+            report_full_pdf_s3=tex_bundle_s3,  # Reusing field to store tex bundle location
+            report_lowres_pdf_s3=tex_bundle_s3,
             metrics_json_s3=metrics_json_s3,
             metrics_csv_s3=metrics_csv_s3,
             total_panels=len(panel_grid),

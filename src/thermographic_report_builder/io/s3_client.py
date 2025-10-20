@@ -193,3 +193,111 @@ class S3Client:
             error_msg = f"Failed to upload to s3://{bucket}/{s3_key}: {e}"
             logger.error(error_msg)
             raise S3UploadError(error_msg) from e
+
+    def upload_tex_bundle(self, work_dir: Path) -> str:
+        """
+        Upload LaTeX bundle (tex file + all assets) to S3 for compilation.
+
+        Uploads all files from work_dir to a temporary location in S3
+        for the LaTeX compiler job to download and process.
+
+        Args:
+            work_dir: Directory containing report.tex and report_images/
+
+        Returns:
+            S3 prefix where bundle was uploaded
+
+        Raises:
+            S3UploadError: If upload fails
+        """
+        base_prefix = f"{settings.user_id}/projects/{settings.project_id}/tex_bundle"
+        bucket = settings.reports_bucket
+
+        logger.info(f"Uploading LaTeX bundle to s3://{bucket}/{base_prefix}")
+
+        try:
+            file_count = 0
+
+            # Upload .tex file
+            tex_file = work_dir / "report.tex"
+            if tex_file.exists():
+                self.upload_file(tex_file, f"{base_prefix}/report.tex", bucket)
+                file_count += 1
+
+            # Upload all images
+            images_dir = work_dir / "report_images"
+            if images_dir.exists():
+                for img_file in images_dir.iterdir():
+                    if img_file.is_file():
+                        self.upload_file(img_file, f"{base_prefix}/report_images/{img_file.name}", bucket)
+                        file_count += 1
+
+            logger.info(f"Uploaded {file_count} files to LaTeX bundle")
+            return f"s3://{bucket}/{base_prefix}"
+
+        except Exception as e:
+            error_msg = f"Failed to upload LaTeX bundle: {e}"
+            logger.error(error_msg)
+            raise S3UploadError(error_msg) from e
+
+    def download_odm_stats(self, output_dir: Path) -> Path:
+        """
+        Download ODM statistics and visualizations from S3.
+
+        Downloads all files from the odm_stats/ directory including:
+        - stats.json (processing statistics)
+        - topview.png (flight path visualization)
+        - matchgraph.png (feature matching graph)
+        - overlap.png (image overlap diagram)
+        - residual_histogram.png (reconstruction residuals)
+        - And other diagnostic images
+
+        Args:
+            output_dir: Local directory to save ODM stats files
+
+        Returns:
+            Path to the output directory
+
+        Raises:
+            S3DownloadError: If download fails
+        """
+        output_dir.mkdir(exist_ok=True, parents=True)
+
+        # ODM stats are stored in the orthos bucket
+        prefix = f"{settings.user_id}/projects/{settings.project_id}/odm_stats/"
+        bucket = settings.orthos_bucket
+
+        logger.info(f"Downloading ODM stats from s3://{bucket}/{prefix}")
+
+        try:
+            # List all files in the odm_stats directory
+            response = self.s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
+
+            if 'Contents' not in response:
+                logger.warning(f"No ODM stats found at s3://{bucket}/{prefix}")
+                return output_dir
+
+            file_count = 0
+            for obj in response['Contents']:
+                s3_key = obj['Key']
+
+                # Skip the directory itself
+                if s3_key.endswith('/'):
+                    continue
+
+                # Get filename relative to prefix
+                filename = s3_key.replace(prefix, '')
+                local_path = output_dir / filename
+
+                # Download file
+                logger.debug(f"Downloading {s3_key} to {local_path}")
+                self.s3.download_file(bucket, s3_key, str(local_path))
+                file_count += 1
+
+            logger.info(f"Downloaded {file_count} ODM stats files to {output_dir}")
+            return output_dir
+
+        except ClientError as e:
+            error_msg = f"Failed to download ODM stats from s3://{bucket}/{prefix}: {e}"
+            logger.error(error_msg)
+            raise S3DownloadError(error_msg) from e
