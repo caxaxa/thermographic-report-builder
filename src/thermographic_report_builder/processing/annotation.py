@@ -39,18 +39,18 @@ def annotate_orthophoto(
             bbox = defect.bbox
             color = DEFECT_COLORS.get(defect.defect_type, (255, 255, 255))
 
-            # Draw rectangle
+            # Draw rectangle (convert floats to ints for OpenCV)
             cv2.rectangle(
                 ortho_img,
-                (bbox.left, bbox.top),
-                (bbox.right, bbox.bottom),
+                (int(bbox.left), int(bbox.top)),
+                (int(bbox.right), int(bbox.bottom)),
                 color,
                 thickness=3,
             )
 
-            # Add label
+            # Add label (convert floats to ints for OpenCV)
             label = defect.defect_type
-            text_pos = (bbox.left, bbox.top - 5)
+            text_pos = (int(bbox.left), int(bbox.top) - 5)
             cv2.putText(
                 ortho_img,
                 label,

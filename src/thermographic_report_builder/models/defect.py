@@ -18,10 +18,10 @@ class DefectType(str, Enum):
 class BoundingBox(BaseModel):
     """Bounding box in image pixel coordinates."""
 
-    left: int = Field(ge=0, description="Left coordinate in pixels")
-    top: int = Field(ge=0, description="Top coordinate in pixels")
-    width: int = Field(gt=0, description="Width in pixels")
-    height: int = Field(gt=0, description="Height in pixels")
+    left: float = Field(ge=0, description="Left coordinate in pixels")
+    top: float = Field(ge=0, description="Top coordinate in pixels")
+    width: float = Field(gt=0, description="Width in pixels")
+    height: float = Field(gt=0, description="Height in pixels")
     label: str = Field(description="Defect type label")
 
     @property
