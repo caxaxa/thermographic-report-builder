@@ -57,12 +57,39 @@ thermographic_report_builder/
 - **Orthophoto**: `s3://solar-orthos-{env}/{user}/projects/{project}/odm_orthophoto.tif`
 - **Defect Labels**: `s3://solar-reports-{env}/{user}/projects/{project}/defect_labels.json`
 - **Raw Thermal Images**: `s3://solar-uploads-{env}/{user}/projects/{project}/images/*.JPG`
+- **(Optional) ODM Stats**: `s3://solar-intermediate-{env}/{user}/projects/{project}/odm/stats/`
+
+#### Defect Labels Schema
+
+`src/thermographic_report_builder/models/job.py` expects the Phase 2.1 JSON produced by `scripts/convert_yolo_to_report_format.py`:
+
+```json
+[
+  {
+    "boundingBox": {
+      "boundingBoxes": [
+        {
+          "left": 220.06,
+          "top": 329.78,
+          "width": 156.90,
+          "height": 84.10,
+          "label": "solarpanels"
+        }
+      ]
+    }
+  }
+]
+```
+
+The report builder downloads that file from `s3://solar-reports-{env}/{user}/projects/{project}/defect_labels.json`.
 
 ### Outputs (to S3)
 - **Full PDF**: `s3://solar-reports-{env}/{user}/projects/{project}/thermographic-report/report-full.pdf`
 - **Low-Res PDF**: `s3://solar-reports-{env}/{user}/projects/{project}/thermographic-report/report-lowres.pdf`
 - **Metrics JSON**: `s3://solar-reports-{env}/{user}/projects/{project}/thermographic-report/metrics.json`
 - **Metrics CSV**: `s3://solar-reports-{env}/{user}/projects/{project}/thermographic-report/metrics.csv`
+
+`JobOutput` (see `models/job.py`) also includes the LaTeX bundle path so upstream services can archive every artifact produced during the run.
 
 ## Environment Variables
 
@@ -81,6 +108,22 @@ SOLAR_REPORTS_BUCKET=solar-reports-prod
 SOLAR_AREA_NAME="Solar Farm"
 SOLAR_LOG_LEVEL=INFO
 ```
+
+### Runtime Configuration Reference
+
+`src/thermographic_report_builder/config/settings.py` exposes additional knobs:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `SOLAR_ORTHOPHOTO_DOWNSCALE_FACTOR` | `0.25` | Downscale factor applied when generating the overview PNG |
+| `SOLAR_CROP_DOWNSCALE_FACTOR` | `0.5` | Downscale applied to per-defect crops |
+| `SOLAR_DEFAULT_PANEL_WIDTH_PX` | `127` | Used to size crops when detections are sparse |
+| `SOLAR_CROP_PANEL_SIZE` | `5` | Number of panels captured per crop tile |
+| `SOLAR_REPORT_LANGUAGE` | `pt-BR` | Passed to LaTeX `babel` |
+| `SOLAR_CLIENT_NAME` / `SOLAR_ENGINEER_NAME` / `SOLAR_CREA_NUMBER` | anonymized values | Strings printed on the PDF cover and appendix |
+| `SOLAR_LOG_JSON` | `true` | Toggle structured JSON logging for CloudWatch |
+
+Tune these via environment variables in AWS Batch or a local `.env` file.
 
 ## Building and Running
 
@@ -183,6 +226,15 @@ const reportBuilderJob = new batch.JobDefinition(this, 'ReportBuilderJob', {
 9. **Export Metrics** - Calculate statistics and export to JSON/CSV
 10. **Upload Results** - Push all artifacts to S3
 
+## Troubleshooting
+
+| Symptom | Likely Cause | Recommended Action |
+|---------|--------------|--------------------|
+| `defect_labels.json` not found | Detection pipeline failed or S3 prefix typo | Verify Detectron inference uploaded labels to `solar-reports-{env}/{user}/projects/{project}/defect_labels.json`; rerun inference if missing |
+| No GPS matches | Raw thermal images missing EXIF or not uploaded | Confirm `s3://solar-uploads-{env}/{user}/projects/{project}/images/` contains original frames with GPS metadata |
+| LaTeX build failure | Non-ASCII characters or missing packages | Inspect CloudWatch logs, ensure env vars are UTF-8, rebuild image only after confirming required `texlive-*` packages |
+| Blank overview/crops | Orthophoto download failed or path mismatch | Confirm IAM role permissions and bucket names (`SOLAR_ORTHOS_BUCKET`, `SOLAR_UPLOADS_BUCKET`); enable `SOLAR_LOG_LEVEL=DEBUG` for verbose traces |
+
 ## Monitoring
 
 Structured JSON logs are sent to CloudWatch with these key events:
@@ -199,7 +251,7 @@ Structured JSON logs are sent to CloudWatch with these key events:
 
 ## Legacy Code
 
-The original prototype is preserved in `LEGACY_CODE/` for reference but is **not used** in production. The modern implementation in `src/` provides:
+The original prototype is preserved in `LEGACY_CODE/`. Production uses the modern code in `src/`, but we intentionally keep the legacy assets because the PDF layout quality is still superior for a few customer farms. Feel free to mine it for template ideas while we continue closing the gap.
 
 - Type safety with Pydantic
 - Cloud-native S3 integration
