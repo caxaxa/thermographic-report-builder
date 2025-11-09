@@ -140,14 +140,20 @@ class ReportBuilder:
         # Enable fancy headers/footers
         doc.append(NoEscape(r"\pagestyle{fancy}"))
 
-        # Section 1: Client data
+        # Section 1: Introduction
+        self._add_introduction_section(doc)
+
+        # Section 2: Client data
         self._add_client_section(doc)
 
-        # Section 2: Area overview
+        # Section 3: Area overview
         self._add_area_overview(doc)
 
-        # Section 3: Defect details
-        self._add_defect_details(doc)
+        # Section 4: Defect summary table
+        self._add_defect_summary_table(doc)
+
+        # Section 5-7: Defect details by type
+        self._add_defect_details_by_type(doc)
 
         # Appendix: Flight data and ODM statistics (if available)
         self._add_appendix(doc)
@@ -293,7 +299,7 @@ RoyalBlue]
 \node[align=center] at ($(current page.center)+(0,-9.5)$)
 { Desenvolvido por:};
 \node[align=center] at ($(current page.center)+(0,-11)$)
-{\includegraphics[width=0.4\paperwidth]{report_images/aisol_logo.png}};
+{\includegraphics[width=0.2\paperwidth]{report_images/aisol_logo.png}};
 
 \end{tikzpicture}%
 """))
@@ -314,6 +320,11 @@ RoyalBlue]
         doc.append(NoEscape(r"\textbf{Software:} GreTA® - Sistema de Análise Termográfica\\"))
         doc.append(NoEscape(r"\end{center}"))
         doc.append(NoEscape(r"\rule{\linewidth}{0.5pt}"))
+        doc.append(NoEscape(r"\vfill"))
+        doc.append(NoEscape(r"\noindent\textbf{Copyright © 2025 Aisol Soluções em Inteligência Artificial.}\\"))
+        doc.append(NoEscape(r"Todos os direitos reservados. Nenhuma parte desta publicação pode ser reproduzida, distribuída ou transmitida sem autorização prévia.\\"))
+        doc.append(NoEscape(r"\vspace*{0.2cm}"))
+        doc.append(NoEscape(r"\noindent\textbf{ISBN:} A definir.\\"))
         doc.append(NoEscape(r"\newpage"))
 
     def _add_abstract(self, doc: pl.Document) -> None:
@@ -322,6 +333,20 @@ RoyalBlue]
         doc.append(NoEscape(r"\begin{abstract}"))
         doc.append(NoEscape(constants.REPORT_ABSTRACT_PT))
         doc.append(NoEscape(r"\end{abstract}"))
+
+    def _add_introduction_section(self, doc: pl.Document) -> None:
+        """Add introduction section with methodology and report structure."""
+        doc.append(NoEscape(r"\section{Introdução}"))
+        doc.append(NoEscape(constants.REPORT_INTRO_PT))
+
+        # Add drone intro text if ODM stats are available
+        if self.odm_stats:
+            drone_intro = (
+                "A última seção aborda o \\textbf{Voo do Drone e a Construção da Imagem Ortorretificada}, "
+                "onde são documentados os parâmetros do voo do drone, incluindo altitude, velocidade e trajetória, "
+                "além dos detalhes dos sensores infravermelhos empregados."
+            )
+            doc.append(NoEscape(drone_intro))
 
     def _add_client_section(self, doc: pl.Document) -> None:
         """Add client data section."""
@@ -349,6 +374,125 @@ RoyalBlue]
             with doc.create(pl.Figure(position="h!")) as fig:
                 fig.add_image(layer_path, width=NoEscape(r"0.9\textwidth"))
                 fig.add_caption("Mapa de rastreadores e defeitos detectados")
+
+    def _add_defect_summary_table(self, doc: pl.Document) -> None:
+        """Add summary table of all detected defects."""
+        if not self.panels_with_defects:
+            return
+
+        # Flatten panel defects into list of (panel_id, defect_type, coords)
+        defect_rows = []
+        for panel in sorted(self.panels_with_defects, key=lambda p: (p.column, p.row)):
+            for defect_type_attr, defect_label in [
+                ("hotspots", "Pontos Quentes (Hot Spots)"),
+                ("faulty_diodes", "Diodos de Bypass Queimados"),
+                ("offline_panels", "Painéis Desligados"),
+            ]:
+                defects = getattr(panel, defect_type_attr, [])
+                for defect in defects:
+                    coords = defect.panel_centroid_geospatial
+                    coords_str = f"({coords.latitude:.6f}, {coords.longitude:.6f})"
+                    defect_rows.append((defect_label, panel.panel_id, coords_str))
+
+        # Create tables with max 35 rows each (for pagination)
+        rows_per_table = 35
+        total_rows = len(defect_rows)
+
+        for batch_idx in range(0, total_rows, rows_per_table):
+            batch = defect_rows[batch_idx:batch_idx + rows_per_table]
+
+            with doc.create(pl.Table(position="h!")) as table:
+                caption = "Resumo dos Defeitos Identificados" if batch_idx == 0 else "Resumo dos Defeitos Identificados (cont.)"
+                table.add_caption(caption)
+                table.append(NoEscape(r"\centering"))
+
+                with doc.create(pl.Tabular("lcl")) as tabular:
+                    tabular.append(NoEscape(r"\toprule"))
+                    tabular.add_row(["Tipo de Problema", "Local do Painel", "Coordenadas"], escape=False)
+                    tabular.append(NoEscape(r"\midrule"))
+
+                    for defect_label, panel_id, coords_str in batch:
+                        tabular.add_row([defect_label, panel_id, coords_str])
+
+                    tabular.append(NoEscape(r"\bottomrule"))
+
+            doc.append(NoEscape(r"\FloatBarrier"))
+
+    def _add_defect_details_by_type(self, doc: pl.Document) -> None:
+        """Add three dedicated sections for each defect type."""
+        defect_types = [
+            ("hotspots", "Pontos Quentes (Hot Spots)",
+             "Foram detectados pontos quentes nas placas abaixo.",
+             "No painel {panel_id}, há sinais de pontos quentes conforme as figuras acima."),
+            ("faulty_diodes", "Diodos de Bypass Queimados",
+             "Foram detectados diodos de bypass queimados nas placas abaixo.",
+             "No painel {panel_id}, foram detectados diodos de bypass queimados."),
+            ("offline_panels", "Painéis Desligados",
+             "Foram detectadas anomalias indicando painel(es) desligados nas placas abaixo.",
+             "No painel {panel_id}, foram detectadas anomalias indicando painel(es) desligados."),
+        ]
+
+        for defect_attr, section_title, intro_text, panel_text_template in defect_types:
+            doc.append(NoEscape(r"\newpage"))
+            doc.append(NoEscape(r"\section{" + section_title + "}"))
+
+            # Get panels with this defect type
+            panels_with_type = [p for p in self.panels_with_defects if getattr(p, defect_attr, [])]
+
+            if panels_with_type:
+                doc.append(intro_text + "\n\n")
+
+                for panel in sorted(panels_with_type, key=lambda p: (p.column, p.row)):
+                    self._add_panel_defect_by_type(doc, panel, defect_attr, panel_text_template)
+            else:
+                # No defects of this type
+                if defect_attr == "hotspots":
+                    doc.append("Não foram encontrados problemas de pontos quentes na área inspecionada.\n")
+                elif defect_attr == "faulty_diodes":
+                    doc.append("Não foram encontrados problemas de diodos de bypass queimados na área inspecionada.\n")
+                elif defect_attr == "offline_panels":
+                    doc.append("Não foram encontrados problemas de painéis desligados na área inspecionada.\n")
+
+    def _add_panel_defect_by_type(self, doc: pl.Document, panel: Panel, defect_type: str, text_template: str) -> None:
+        """Add subsubsection for a single panel with specific defect type."""
+        doc.append(NoEscape(r"\subsubsection{Painel " + panel.panel_id + "}"))
+
+        # Detailed caption
+        col, row = panel.column, panel.row
+        overall_caption = f"Imagens do Painel n. {row} da coluna n. {col}."
+
+        # Build image paths
+        minimap_img_path = self.images_dir / f"{defect_type}_({panel.panel_id})_minimap.pdf"
+        crop_img_path = self.images_dir / f"{defect_type}_({panel.panel_id})_cropped.jpg"
+        drone_img_path = self.images_dir / f"{defect_type}_({panel.panel_id}).jpg"
+
+        # Relative paths for LaTeX
+        minimap_img = f"report_images/{defect_type}_({panel.panel_id})_minimap.pdf"
+        crop_img = f"report_images/{defect_type}_({panel.panel_id})_cropped.jpg"
+        drone_img = f"report_images/{defect_type}_({panel.panel_id}).jpg"
+
+        # Create figure with subfloats
+        with doc.create(pl.Figure(position="h!")) as fig:
+            fig.append(NoEscape(r"\centering"))
+
+            if minimap_img_path.exists():
+                fig.append(NoEscape(r"\subfloat[Mapa de Contexto]{\includegraphics[width=0.31\linewidth]{" + minimap_img + r"}}"))
+                fig.append(NoEscape(r"\hfill"))
+
+            if crop_img_path.exists():
+                fig.append(NoEscape(r"\subfloat[Localização do Problema]{\includegraphics[width=0.31\linewidth]{" + crop_img + r"}}"))
+                fig.append(NoEscape(r"\hfill"))
+
+            if drone_img_path.exists():
+                fig.append(NoEscape(r"\subfloat[Imagem Original do Drone]{\includegraphics[width=0.31\linewidth]{" + drone_img + r"}}"))
+
+            fig.append(NoEscape(r"\caption{" + overall_caption + r"}"))
+
+        doc.append(NoEscape(r"\FloatBarrier"))
+
+        # Add descriptive text
+        panel_text = text_template.format(panel_id=panel.panel_id)
+        doc.append(panel_text + "\n\n")
 
     def _add_defect_details(self, doc: pl.Document) -> None:
         """Add detailed section for each panel with defects."""
@@ -522,7 +666,7 @@ RoyalBlue]
         doc.append(NoEscape(r"\appendix"))
 
         # Appendix A: Drone and Flight Information
-        doc.append(NoEscape(r"\section{Drone and Flight Information}"))
+        doc.append(NoEscape(r"\section{Informações do Drone e Voo}"))
 
         # Add topview if available
         topview_path = self.odm_stats_dir / "topview.png"
@@ -532,36 +676,35 @@ RoyalBlue]
             dest_path = self.images_dir / "topview.png"
             shutil.copy(topview_path, dest_path)
 
-            doc.append(NoEscape(r"\newcommand{\rotatedimage}[1]{\includegraphics[angle=90, width=0.8\textwidth]{#1}}"))
             with doc.create(pl.Figure(position="h!")) as fig:
-                fig.append(NoEscape(r"\rotatedimage{report_images/topview.png}"))
-                fig.add_caption("Drone Flight Path")
+                fig.add_image("report_images/topview.png", width=NoEscape(r"0.8\textwidth"))
+                fig.add_caption("Trajetória de Voo do Drone")
 
-        doc.append("Drone Flight Information.")
+        doc.append("Informações do voo do drone e processamento.")
 
         # Processing Statistics Table
         if "processing_statistics" in self.odm_stats:
             self._add_processing_stats_table(doc, self.odm_stats["processing_statistics"])
 
         # Appendix B: Orthophoto Data
-        doc.append(NoEscape(r"\section{Orthophoto Data}"))
+        doc.append(NoEscape(r"\section{Dados da Ortofoto}"))
 
         # Matchgraph
-        self._add_odm_image(doc, "matchgraph.png", "Feature Matching Graph")
+        self._add_odm_image(doc, "matchgraph.png", "Grafo de Correspondência de Características")
 
         # GPS Errors Table
         if "gps_errors" in self.odm_stats:
             self._add_gps_errors_table(doc, self.odm_stats["gps_errors"])
 
         # Overlap diagram
-        self._add_odm_image(doc, "overlap.png", "Image Overlap Diagram")
+        self._add_odm_image(doc, "overlap.png", "Diagrama de Sobreposição de Imagens")
 
         # Reconstruction Statistics Table
         if "reconstruction_statistics" in self.odm_stats:
             self._add_reconstruction_stats_table(doc, self.odm_stats["reconstruction_statistics"])
 
         # Residual histogram
-        self._add_odm_image(doc, "residual_histogram.png", "Model Residual Histogram")
+        self._add_odm_image(doc, "residual_histogram.png", "Histograma de Resíduos do Modelo")
 
         # Features Statistics Table
         if "features_statistics" in self.odm_stats:
@@ -593,7 +736,7 @@ RoyalBlue]
         doc.append(NoEscape(r"\centering"))
         doc.append(NoEscape(r"\begin{tabular}{lr}"))
         doc.append(NoEscape(r"\toprule"))
-        doc.append(NoEscape(r"Processing Step & Time \\"))
+        doc.append(NoEscape(r"Etapa de Processamento & Tempo \\"))
         doc.append(NoEscape(r"\midrule"))
 
         for step, time_val in times.items():
@@ -606,7 +749,7 @@ RoyalBlue]
 
         doc.append(NoEscape(r"\bottomrule"))
         doc.append(NoEscape(r"\end{tabular}"))
-        doc.append(NoEscape(r"\caption{Processing Statistics}"))
+        doc.append(NoEscape(r"\caption{Estatísticas de Processamento}"))
         doc.append(NoEscape(r"\end{table}"))
         doc.append(NoEscape(r"\end{center}"))
 
@@ -617,30 +760,30 @@ RoyalBlue]
         doc.append(NoEscape(r"\centering"))
         doc.append(NoEscape(r"\begin{tabular}{lr}"))
         doc.append(NoEscape(r"\toprule"))
-        doc.append(NoEscape(r"GPS Error Metric & Value \\"))
+        doc.append(NoEscape(r"Métrica de Erro GPS & Valor \\"))
         doc.append(NoEscape(r"\midrule"))
 
         if "mean" in gps_errors:
             for axis in ["x", "y", "z"]:
                 if axis in gps_errors["mean"]:
                     val = gps_errors["mean"][axis]
-                    doc.append(NoEscape(f"Mean {axis.upper()} & {val:.4f} \\\\"))
+                    doc.append(NoEscape(f"Média {axis.upper()} & {val:.4f} \\\\"))
 
         if "std" in gps_errors:
             for axis in ["x", "y", "z"]:
                 if axis in gps_errors["std"]:
                     val = gps_errors["std"][axis]
-                    doc.append(NoEscape(f"STD {axis.upper()} & {val:.4f} \\\\"))
+                    doc.append(NoEscape(f"Desvio Padrão {axis.upper()} & {val:.4f} \\\\"))
 
         if "error" in gps_errors:
             for axis in ["x", "y", "z"]:
                 if axis in gps_errors["error"]:
                     val = gps_errors["error"][axis]
-                    doc.append(NoEscape(f"Error {axis.upper()} & {val:.4f} \\\\"))
+                    doc.append(NoEscape(f"Erro {axis.upper()} & {val:.4f} \\\\"))
 
         doc.append(NoEscape(r"\bottomrule"))
         doc.append(NoEscape(r"\end{tabular}"))
-        doc.append(NoEscape(r"\caption{GPS Errors}"))
+        doc.append(NoEscape(r"\caption{Erros de GPS}"))
         doc.append(NoEscape(r"\end{table}"))
         doc.append(NoEscape(r"\end{center}"))
 
@@ -651,14 +794,14 @@ RoyalBlue]
         doc.append(NoEscape(r"\centering"))
         doc.append(NoEscape(r"\begin{tabular}{lr}"))
         doc.append(NoEscape(r"\toprule"))
-        doc.append(NoEscape(r"Reconstruction Metric & Value \\"))
+        doc.append(NoEscape(r"Métrica de Reconstrução & Valor \\"))
         doc.append(NoEscape(r"\midrule"))
 
         metrics = [
-            ("components", "Components"),
-            ("has_gps", "Has GPS"),
-            ("initial_points_count", "Initial Points"),
-            ("reconstructed_points_count", "Reconstructed Points"),
+            ("components", "Componentes"),
+            ("has_gps", "Possui GPS"),
+            ("initial_points_count", "Pontos Iniciais"),
+            ("reconstructed_points_count", "Pontos Reconstruídos"),
         ]
 
         for key, label in metrics:
@@ -668,7 +811,7 @@ RoyalBlue]
 
         doc.append(NoEscape(r"\bottomrule"))
         doc.append(NoEscape(r"\end{tabular}"))
-        doc.append(NoEscape(r"\caption{Reconstruction Statistics}"))
+        doc.append(NoEscape(r"\caption{Estatísticas de Reconstrução}"))
         doc.append(NoEscape(r"\end{table}"))
         doc.append(NoEscape(r"\end{center}"))
 
@@ -679,26 +822,30 @@ RoyalBlue]
         doc.append(NoEscape(r"\centering"))
         doc.append(NoEscape(r"\begin{tabular}{lr}"))
         doc.append(NoEscape(r"\toprule"))
-        doc.append(NoEscape(r"Feature Metric & Value \\"))
+        doc.append(NoEscape(r"Métrica de Características & Valor \\"))
         doc.append(NoEscape(r"\midrule"))
+
+        metric_labels = {"min": "Mínimo", "max": "Máximo", "mean": "Média", "median": "Mediana"}
 
         if "detected_features" in stats:
             detected = stats["detected_features"]
             for metric in ["min", "max", "mean", "median"]:
                 if metric in detected:
                     val = detected[metric]
-                    doc.append(NoEscape(f"Detected Features - {metric.capitalize()} & {val:.0f} \\\\"))
+                    label = metric_labels[metric]
+                    doc.append(NoEscape(f"Características Detectadas - {label} & {val:.0f} \\\\"))
 
         if "reconstructed_features" in stats:
             reconstructed = stats["reconstructed_features"]
             for metric in ["min", "max", "mean", "median"]:
                 if metric in reconstructed:
                     val = reconstructed[metric]
-                    doc.append(NoEscape(f"Reconstructed Features - {metric.capitalize()} & {val:.0f} \\\\"))
+                    label = metric_labels[metric]
+                    doc.append(NoEscape(f"Características Reconstruídas - {label} & {val:.0f} \\\\"))
 
         doc.append(NoEscape(r"\bottomrule"))
         doc.append(NoEscape(r"\end{tabular}"))
-        doc.append(NoEscape(r"\caption{Feature Statistics}"))
+        doc.append(NoEscape(r"\caption{Estatísticas de Características}"))
         doc.append(NoEscape(r"\end{table}"))
         doc.append(NoEscape(r"\end{center}"))
 

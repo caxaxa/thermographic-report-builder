@@ -52,7 +52,8 @@ class DefectMapper:
                     column=col_idx, row=row_idx, bbox=panel_bbox
                 )
 
-        logger.info(f"Created panel grid: {len(rows)} rows, max {max(len(r) for r in rows)} columns")
+        max_cols = max((len(r) for r in rows), default=0)
+        logger.info(f"Created panel grid: {len(rows)} rows, max {max_cols} columns")
 
         # 3. Assign each defect to nearest panel
         defects_assigned = 0

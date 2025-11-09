@@ -117,6 +117,7 @@ def main() -> int:
             ortho_path=ortho_path,
             panel_grid=panel_grid,
             output_dir=images_dir,
+            layer_pdf_path=images_dir / "layer_img.pdf",
             scale_factor=settings.crop_downscale_factor,
         )
 
