@@ -8,6 +8,7 @@ from .exceptions import (
     ImageProcessingError,
     ReportGenerationError,
 )
+from .geospatial import PixelToLatLonConverter
 
 __all__ = [
     "setup_logging",
@@ -17,4 +18,5 @@ __all__ = [
     "S3UploadError",
     "ImageProcessingError",
     "ReportGenerationError",
+    "PixelToLatLonConverter",
 ]

@@ -6,6 +6,7 @@ import rasterio
 from pathlib import Path
 from PIL import Image
 from typing import Any
+from rasterio.crs import CRS
 
 from ..utils.logger import get_logger
 from ..utils.exceptions import ImageProcessingError
@@ -13,7 +14,7 @@ from ..utils.exceptions import ImageProcessingError
 logger = get_logger(__name__)
 
 
-def load_orthophoto(path: Path) -> tuple[np.ndarray, Any, tuple[int, int]]:
+def load_orthophoto(path: Path) -> tuple[np.ndarray, Any, CRS | None, tuple[int, int]]:
     """
     Load orthophoto GeoTIFF with georeferencing information.
 
@@ -21,7 +22,7 @@ def load_orthophoto(path: Path) -> tuple[np.ndarray, Any, tuple[int, int]]:
         path: Path to orthophoto GeoTIFF file
 
     Returns:
-        Tuple of (image_array, rasterio_transform, (height, width))
+        Tuple of (image_array, rasterio_transform, crs, (height, width))
 
     Raises:
         ImageProcessingError: If loading fails
@@ -38,10 +39,11 @@ def load_orthophoto(path: Path) -> tuple[np.ndarray, Any, tuple[int, int]]:
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
             transform = src.transform
+            crs = src.crs
             height, width = img.shape[:2]
 
             logger.info(f"Loaded orthophoto: {width}x{height} pixels, {img.shape[2]} channels")
-            return img, transform, (height, width)
+            return img, transform, crs, (height, width)
 
     except Exception as e:
         error_msg = f"Failed to load orthophoto from {path}: {e}"

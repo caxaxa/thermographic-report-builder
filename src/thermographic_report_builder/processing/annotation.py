@@ -31,7 +31,7 @@ def annotate_orthophoto(
     logger.info(f"Annotating orthophoto with scale factor {scale_factor}")
 
     # Load orthophoto
-    ortho_img, _, _ = load_orthophoto(ortho_path)
+    ortho_img, _, _, _ = load_orthophoto(ortho_path)
 
     # Draw all defects
     for panel in panel_grid.values():

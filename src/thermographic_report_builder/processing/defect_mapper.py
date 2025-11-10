@@ -5,6 +5,7 @@ import numpy as np
 
 from ..models.defect import Panel, Defect, BoundingBox, GeospatialCoordinate
 from ..utils.logger import get_logger
+from ..utils.geospatial import PixelToLatLonConverter
 
 logger = get_logger(__name__)
 
@@ -12,18 +13,23 @@ logger = get_logger(__name__)
 class DefectMapper:
     """Maps defects to solar panels and creates structured panel grid."""
 
-    def __init__(self, image_width: int, image_height: int, raster_transform: any):
+    def __init__(
+        self,
+        image_width: int,
+        image_height: int,
+        geo_converter: PixelToLatLonConverter,
+    ):
         """
         Initialize defect mapper.
 
         Args:
             image_width: Orthophoto width in pixels
             image_height: Orthophoto height in pixels
-            raster_transform: Rasterio affine transform for pixel->geospatial conversion
+            geo_converter: Helper to convert pixels into geodetic coordinates
         """
         self.img_width = image_width
         self.img_height = image_height
-        self.transform = raster_transform
+        self.geo_converter = geo_converter
 
     def map_defects_to_panels(
         self, panel_boxes: list[BoundingBox], defect_boxes: list[BoundingBox]
@@ -140,8 +146,8 @@ class DefectMapper:
         # Get panel center in pixel coordinates
         panel_center_px = panel.bbox.center
 
-        # Convert to geospatial coordinates using raster transform
-        lon, lat = self.transform * panel_center_px
+        # Convert to geospatial coordinates (always WGS84)
+        lon, lat = self.geo_converter.pixel_to_lonlat(panel_center_px)
 
         return Defect(
             bbox=bbox,

@@ -39,7 +39,7 @@ class S3Client:
         Raises:
             S3DownloadError: If download fails
         """
-        key = f"{settings.user_id}/projects/{settings.project_id}/odm_orthophoto.tif"
+        key = f"{settings.user_id}/projects/{settings.project_id}/odm_orthophoto/odm_orthophoto.tif"
         bucket = settings.orthos_bucket
 
         logger.info(f"Downloading orthophoto from s3://{bucket}/{key}")
@@ -53,6 +53,48 @@ class S3Client:
             error_msg = f"Failed to download orthophoto from s3://{bucket}/{key}: {e}"
             logger.error(error_msg)
             raise S3DownloadError(error_msg) from e
+
+    def download_orthophoto_resampled(self, local_path: Path, prefer_resampled: bool = True) -> tuple[Path, str]:
+        """
+        Download orthophoto from S3, preferring resampled version if available.
+
+        This method tries to download the resampled (1.6cm GSD) version first,
+        which ensures coordinate consistency with the inference pipeline.
+        Falls back to original if resampled version doesn't exist.
+
+        Args:
+            local_path: Local path to save the file
+            prefer_resampled: If True, try to download resampled version first
+
+        Returns:
+            Tuple of (downloaded_path, version_used)
+            where version_used is either "resampled_1.6cm" or "original"
+
+        Raises:
+            S3DownloadError: If download fails
+        """
+        bucket = settings.orthos_bucket
+
+        # Try resampled version first if preferred
+        if prefer_resampled:
+            resampled_key = f"{settings.user_id}/projects/{settings.project_id}/odm_orthophoto/odm_orthophoto_1.6cm.tif"
+            logger.info(f"Attempting to download resampled orthophoto from s3://{bucket}/{resampled_key}")
+
+            try:
+                self.s3.download_file(Bucket=bucket, Key=resampled_key, Filename=str(local_path))
+                size_mb = local_path.stat().st_size / 1_000_000
+                logger.info(f"Downloaded resampled orthophoto (1.6cm GSD): {size_mb:.1f} MB")
+                return local_path, "resampled_1.6cm"
+            except ClientError as e:
+                error_code = e.response.get('Error', {}).get('Code', '')
+                if error_code == 'NoSuchKey' or error_code == '404':
+                    logger.info("Resampled orthophoto not found, falling back to original")
+                else:
+                    logger.warning(f"Failed to download resampled orthophoto: {e}")
+
+        # Fall back to original
+        logger.info("Downloading original orthophoto")
+        return self.download_orthophoto(local_path), "original"
 
     def download_defect_labels(self, local_path: Path) -> Path:
         """

@@ -41,7 +41,7 @@ def crop_defect_regions(
     logger.info(f"Cropping defect regions with scale {scale_factor}")
 
     # Load orthophoto
-    ortho_img, _, (img_h, img_w) = load_orthophoto(ortho_path)
+    ortho_img, _, _, (img_h, img_w) = load_orthophoto(ortho_path)
 
     # Color map for defect annotations (BGR format for OpenCV)
     color_map = {

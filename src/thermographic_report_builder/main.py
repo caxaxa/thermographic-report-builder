@@ -11,7 +11,7 @@ from .processing import DefectMapper, annotate_orthophoto, create_layer_image, c
 from .report import ReportBuilder, export_metrics_json, export_metrics_csv
 from .models.report import ReportConfig
 from .models.job import JobOutput
-from .utils import setup_logging, get_logger
+from .utils import setup_logging, get_logger, PixelToLatLonConverter
 from .utils.exceptions import ProcessingError
 
 logger = get_logger(__name__)
@@ -56,7 +56,13 @@ def main() -> int:
 
         s3_client = S3Client()
 
-        ortho_path = s3_client.download_orthophoto(work_dir / "odm_orthophoto.tif")
+        # Download orthophoto (prefer resampled 1.6cm version for coordinate consistency)
+        ortho_path, ortho_version = s3_client.download_orthophoto_resampled(
+            work_dir / "odm_orthophoto.tif",
+            prefer_resampled=True
+        )
+        logger.info(f"Using orthophoto version: {ortho_version}")
+
         labels_path = s3_client.download_defect_labels(work_dir / "defect_labels.json")
 
         # ===== STEP 2: Load and parse data =====
@@ -64,7 +70,8 @@ def main() -> int:
         logger.info("STEP 2: Loading orthophoto and defect labels")
         logger.info("=" * 80)
 
-        ortho_img, transform, (img_h, img_w) = load_orthophoto(ortho_path)
+        _, transform, crs, (img_h, img_w) = load_orthophoto(ortho_path)
+        geo_converter = PixelToLatLonConverter(transform, crs)
         defect_labels = load_defect_labels(labels_path)
 
         logger.info(f"Orthophoto: {img_w}x{img_h} pixels")
@@ -75,7 +82,7 @@ def main() -> int:
         logger.info("STEP 3: Mapping defects to panel grid")
         logger.info("=" * 80)
 
-        mapper = DefectMapper(img_w, img_h, transform)
+        mapper = DefectMapper(img_w, img_h, geo_converter)
         panel_grid = mapper.map_defects_to_panels(
             panel_boxes=defect_labels.get_panels(), defect_boxes=defect_labels.get_defects()
         )
@@ -126,7 +133,7 @@ def main() -> int:
         logger.info("STEP 7: Matching raw thermal images via GPS")
         logger.info("=" * 80)
 
-        gps_matcher = GPSMatcher(s3_client)
+        gps_matcher = GPSMatcher(s3_client, geo_converter)
         matched_count = gps_matcher.match_images_to_panels(
             panel_grid=panel_grid, temp_dir=raw_images_dir, output_dir=images_dir
         )
