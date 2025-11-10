@@ -47,6 +47,9 @@ class ReportBuilder:
         # Count defects
         self.panels_with_defects = [p for p in panel_grid.values() if p.has_defects]
         self.total_defects = sum(p.defect_count for p in panel_grid.values())
+        self.total_hotspots = sum(len(p.hotspots) for p in panel_grid.values())
+        self.total_faulty_diodes = sum(len(p.faulty_diodes) for p in panel_grid.values())
+        self.total_offline = sum(len(p.offline_panels) for p in panel_grid.values())
 
         logger.info(
             f"Initialized report builder: {len(panel_grid)} panels, "
@@ -363,6 +366,26 @@ RoyalBlue]
         with doc.create(pl.Section("Visão Geral da Área")):
             doc.append(NoEscape(constants.AREA_OVERVIEW_TEXT_PT))
 
+            # Summary table of total defects before detailed breakdown
+            summary_rows = [
+                ("Pontos Quentes (Hot Spots)", self.total_hotspots),
+                ("Diodos de Bypass Queimados", self.total_faulty_diodes),
+                ("Painéis Desligados", self.total_offline),
+            ]
+
+            with doc.create(pl.Table(position="h!")) as table:
+                table.add_caption("Resumo Geral dos Defeitos Identificados")
+                table.append(NoEscape(r"\centering"))
+                with doc.create(pl.Tabular("lc")) as tabular:
+                    tabular.append(NoEscape(r"\toprule"))
+                    tabular.add_row(["Tipo de Defeito", "Quantidade"], escape=False)
+                    tabular.append(NoEscape(r"\midrule"))
+                    for label, count in summary_rows:
+                        tabular.add_row([label, str(count)], escape=False)
+                    tabular.append(NoEscape(r"\bottomrule"))
+
+            doc.append(NoEscape(r"\FloatBarrier"))
+
             # Orthophoto overview (use relative path)
             ortho_path = "report_images/ortho.png"
             with doc.create(pl.Figure(position="h!")) as fig:
@@ -402,7 +425,7 @@ RoyalBlue]
             batch = defect_rows[batch_idx:batch_idx + rows_per_table]
 
             with doc.create(pl.Table(position="h!")) as table:
-                caption = "Resumo dos Defeitos Identificados" if batch_idx == 0 else "Resumo dos Defeitos Identificados (cont.)"
+                caption = "Localização de Cada Defeito Identificado" if batch_idx == 0 else "Localização de Cada Defeito Identificado (cont.)"
                 table.add_caption(caption)
                 table.append(NoEscape(r"\centering"))
 
@@ -848,4 +871,3 @@ RoyalBlue]
         doc.append(NoEscape(r"\caption{Estatísticas de Características}"))
         doc.append(NoEscape(r"\end{table}"))
         doc.append(NoEscape(r"\end{center}"))
-

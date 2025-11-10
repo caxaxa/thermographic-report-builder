@@ -84,7 +84,7 @@ class GPSMatcher:
                         filename = f"{defect_type_str}_({panel.panel_id}).jpg"
                         output_path = output_dir / filename
 
-                        # Load, resize, and save
+                        # Load, resize, and save original image (no overlay)
                         img_path = Path(closest_image["path"])
                         img, _ = load_raw_image_with_exif(img_path)
 
