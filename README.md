@@ -22,6 +22,7 @@ thermographic_report_builder/
 │   ├── config/          # Settings and constants
 │   ├── utils/           # Logging and exceptions
 │   └── main.py          # AWS Batch entrypoint
+├── latex-compiler/      # Standalone LaTeX compiler Batch job (Docker + script)
 ├── tests/               # Unit and integration tests
 ├── LEGACY_CODE/         # Original prototype (reference only)
 ├── Dockerfile
@@ -148,6 +149,16 @@ docker build -t solar-thermographic-report:latest .
 ```
 
 **Build time**: ~5-10 minutes (due to LaTeX installation)
+
+### LaTeX Compiler Job
+
+The AWS Batch job that turns the uploaded `.tex` bundle into PDFs now lives alongside this repo under `./latex-compiler`:
+
+```bash
+docker build -t solar-latex-compiler:latest ./latex-compiler
+```
+
+That image still exposes the same `compile.py` entrypoint, so AWS Batch job definitions only need a new image URI.
 
 ### Run Locally (with AWS credentials)
 
