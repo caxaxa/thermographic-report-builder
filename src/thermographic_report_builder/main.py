@@ -195,13 +195,92 @@ def main() -> int:
         metrics_json_path = export_metrics_json(panel_grid, work_dir / "metrics.json")
         metrics_csv_path = export_metrics_csv(panel_grid, work_dir / "metrics.csv")
 
-        # ===== STEP 10: Upload LaTeX bundle and metrics to S3 =====
+        # ===== STEP 10: Compile LaTeX to PDF =====
         logger.info("=" * 80)
-        logger.info("STEP 10: Uploading LaTeX bundle and metrics to S3")
+        logger.info("STEP 10: Compiling LaTeX to PDF")
         logger.info("=" * 80)
 
-        # Upload the complete LaTeX bundle (tex + images) for compilation
+        import subprocess
+        import shutil
+
+        # Compile PDF (run pdflatex twice for references)
+        pdf_full_path = work_dir / "report.pdf"
+        try:
+            # First pass
+            result = subprocess.run(
+                ["pdflatex", "-interaction=nonstopmode", "-output-directory", str(work_dir), str(tex_path)],
+                cwd=work_dir,
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            if result.returncode != 0:
+                logger.warning(f"First pdflatex pass had warnings (exit code {result.returncode})")
+                # Log last lines of output to see the error
+                if result.stderr:
+                    logger.error(f"pdflatex stderr: {result.stderr[-2000:]}")
+                if result.stdout:
+                    logger.error(f"pdflatex stdout (last 50 lines): {chr(10).join(result.stdout.splitlines()[-50:])}")
+
+            # Second pass (for cross-references)
+            result = subprocess.run(
+                ["pdflatex", "-interaction=nonstopmode", "-output-directory", str(work_dir), str(tex_path)],
+                cwd=work_dir,
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            if result.returncode != 0:
+                logger.warning(f"Second pdflatex pass had warnings (exit code {result.returncode})")
+                if result.stderr:
+                    logger.error(f"pdflatex stderr: {result.stderr[-2000:]}")
+                if result.stdout:
+                    logger.error(f"pdflatex stdout (last 50 lines): {chr(10).join(result.stdout.splitlines()[-50:])}")
+
+            if pdf_full_path.exists():
+                pdf_size_mb = pdf_full_path.stat().st_size / 1024 / 1024
+                logger.info(f"✓ Generated full-resolution PDF: {pdf_size_mb:.1f} MB")
+            else:
+                raise ProcessingError("PDF generation failed - output file not found")
+
+        except subprocess.TimeoutExpired:
+            raise ProcessingError("PDF compilation timed out after 5 minutes")
+        except Exception as e:
+            raise ProcessingError(f"PDF compilation failed: {e}")
+
+        # Generate low-res PDF using Ghostscript
+        pdf_lowres_path = work_dir / "report-lowres.pdf"
+        try:
+            result = subprocess.run([
+                "gs", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.4",
+                "-dPDFSETTINGS=/ebook", "-dNOPAUSE", "-dQUIET", "-dBATCH",
+                f"-sOutputFile={pdf_lowres_path}", str(pdf_full_path)
+            ], capture_output=True, text=True, timeout=120)
+
+            if pdf_lowres_path.exists():
+                lowres_size_mb = pdf_lowres_path.stat().st_size / 1024 / 1024
+                logger.info(f"✓ Generated low-res PDF: {lowres_size_mb:.1f} MB")
+            else:
+                logger.warning("Low-res PDF generation failed, will upload full PDF only")
+                pdf_lowres_path = None
+        except Exception as e:
+            logger.warning(f"Low-res PDF generation failed: {e}")
+            pdf_lowres_path = None
+
+        # ===== STEP 11: Upload LaTeX bundle, PDFs, and metrics to S3 =====
+        logger.info("=" * 80)
+        logger.info("STEP 11: Uploading reports and metrics to S3")
+        logger.info("=" * 80)
+
+        # Upload the complete LaTeX bundle (tex + images) for archival
         tex_bundle_s3 = s3_client.upload_tex_bundle(work_dir)
+
+        # Upload PDFs
+        pdf_full_s3 = s3_client.upload_report(pdf_full_path, "report-full.pdf")
+        if pdf_lowres_path and pdf_lowres_path.exists():
+            pdf_lowres_s3 = s3_client.upload_report(pdf_lowres_path, "report-lowres.pdf")
+        else:
+            pdf_lowres_s3 = pdf_full_s3  # Fallback to full PDF
 
         # Upload metrics
         metrics_json_s3 = s3_client.upload_report(metrics_json_path, "metrics.json")
@@ -210,14 +289,15 @@ def main() -> int:
         # ===== Success! =====
         duration = time.time() - start_time
         logger.info("=" * 80)
-        logger.info(f"✅ Report data processing completed successfully in {duration:.1f}s")
-        logger.info(f"LaTeX bundle ready at: {tex_bundle_s3}")
+        logger.info(f"✅ Thermographic report generated successfully in {duration:.1f}s")
+        logger.info(f"Full PDF: {pdf_full_s3}")
+        logger.info(f"Low-res PDF: {pdf_lowres_s3}")
         logger.info("=" * 80)
 
         # Create job output summary
         job_output = JobOutput(
-            report_full_pdf_s3=tex_bundle_s3,  # Reusing field to store tex bundle location
-            report_lowres_pdf_s3=tex_bundle_s3,
+            report_full_pdf_s3=pdf_full_s3,
+            report_lowres_pdf_s3=pdf_lowres_s3,
             metrics_json_s3=metrics_json_s3,
             metrics_csv_s3=metrics_csv_s3,
             total_panels=len(panel_grid),

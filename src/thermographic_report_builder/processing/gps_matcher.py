@@ -3,7 +3,7 @@
 import cv2
 import numpy as np
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 from ..models.defect import Panel
 from ..io.s3_client import S3Client
@@ -13,6 +13,10 @@ from ..utils.logger import get_logger
 from ..utils.geospatial import PixelToLatLonConverter
 
 logger = get_logger(__name__)
+
+# Flight direction detection: 'south' means drone flying south, camera looking north
+# Images taken while flying south need to be rotated 180° to orient north-up
+FlightDirection = str  # 'north', 'south', or None
 
 
 class GPSMatcher:
@@ -29,6 +33,7 @@ class GPSMatcher:
         self.s3_client = s3_client
         self.geo_converter = geo_converter
         self.image_cache: Dict[str, dict] = {}  # Cache GPS data to avoid re-reading
+        self.orientation_map: Dict[str, FlightDirection] = {}  # filename -> flight direction
 
     def match_images_to_panels(
         self,
@@ -59,6 +64,9 @@ class GPSMatcher:
             logger.warning("No raw images with GPS data found")
             return 0
 
+        # Determine flight direction for each image based on GPS trajectory
+        self._compute_flight_directions()
+
         matched_count = 0
 
         for panel in panel_grid.values():
@@ -84,9 +92,18 @@ class GPSMatcher:
                         filename = f"{defect_type_str}_({panel.panel_id}).jpg"
                         output_path = output_dir / filename
 
-                        # Load, resize, and save original image (no overlay)
+                        # Load image
                         img_path = Path(closest_image["path"])
                         img, _ = load_raw_image_with_exif(img_path)
+
+                        # Get the source filename to check orientation
+                        src_filename = Path(closest_image["path"]).name
+                        flight_dir = self.orientation_map.get(src_filename)
+
+                        # Rotate 180° if flying south (to orient image north-up)
+                        if flight_dir == "south":
+                            img = cv2.rotate(img, cv2.ROTATE_180)
+                            logger.debug(f"Rotated {src_filename} 180° (flying south)")
 
                         # Resize to half size
                         img_resized = cv2.resize(img, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
@@ -158,3 +175,65 @@ class GPSMatcher:
                 closest = image_meta
 
         return closest
+
+    def _compute_flight_directions(self) -> None:
+        """
+        Determine flight direction for each image based on GPS trajectory.
+
+        By comparing consecutive images (sorted by filename), we can determine
+        if the drone was flying north or south:
+        - If next image has lower latitude -> flying south
+        - If next image has higher latitude -> flying north
+
+        Images taken while flying south need to be rotated 180° because
+        the thermal camera is pointed down and the drone's nose (north of camera)
+        appears at the top of the frame. When flying south, this means
+        "south" is at the top, so we rotate to put "north" at top.
+        """
+        if not self.image_cache:
+            return
+
+        # Get images sorted by filename (captures sequential flight order)
+        sorted_images: List[Tuple[str, dict]] = sorted(
+            [(fname, meta) for fname, meta in self.image_cache.items()
+             if meta.get("latitude") is not None],
+            key=lambda x: x[0]
+        )
+
+        if len(sorted_images) < 2:
+            logger.warning("Not enough images to determine flight direction")
+            return
+
+        # Compare each image with the next to determine direction
+        south_count = 0
+        north_count = 0
+
+        for i in range(len(sorted_images) - 1):
+            current_fname, current_meta = sorted_images[i]
+            next_fname, next_meta = sorted_images[i + 1]
+
+            current_lat = current_meta["latitude"]
+            next_lat = next_meta["latitude"]
+
+            if next_lat < current_lat:
+                # Latitude decreasing -> flying south
+                self.orientation_map[current_fname] = "south"
+                south_count += 1
+            else:
+                # Latitude increasing or same -> flying north
+                self.orientation_map[current_fname] = "north"
+                north_count += 1
+
+        # Last image: assign same direction as previous (or None)
+        if sorted_images:
+            last_fname = sorted_images[-1][0]
+            if len(sorted_images) >= 2:
+                prev_fname = sorted_images[-2][0]
+                self.orientation_map[last_fname] = self.orientation_map.get(prev_fname)
+            else:
+                self.orientation_map[last_fname] = None
+
+        logger.info(
+            "Flight direction analysis: %d south-facing, %d north-facing images",
+            south_count, north_count
+        )

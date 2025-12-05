@@ -12,11 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Fonts (lmodern, etc.)
     texlive-fonts-recommended \
     lmodern \
+    fonts-lmodern \
     # Ghostscript for PDF compression
     ghostscript \
     # AWS CLI v2 dependencies
     curl \
     unzip \
+    && mktexlsr \
     && rm -rf /var/lib/apt/lists/*
 
 # Install AWS CLI v2

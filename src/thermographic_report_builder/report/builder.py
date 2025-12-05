@@ -6,7 +6,7 @@ from datetime import datetime
 import subprocess
 
 import pylatex as pl
-from pylatex.utils import NoEscape, bold
+from pylatex.utils import NoEscape, bold, escape_latex
 
 from ..models.defect import Panel
 from ..models.report import ReportConfig
@@ -282,7 +282,7 @@ align=right,
 black!75
 ]
 {
-{\fontsize{25}{30} \selectfont \bf """ + self.config.area_name + r""" \\[10pt]}
+{\fontsize{25}{30} \selectfont \bf """ + escape_latex(self.config.area_name) + r""" \\[10pt]}
 }
 node[
 midway,
@@ -315,11 +315,11 @@ RoyalBlue]
         doc.append(NoEscape(r"\begin{center}"))
         doc.append(NoEscape(r"{\large\bfseries Relatório de Inspeção por Imagem Térmica}\\"))
         doc.append(NoEscape(r"\vspace*{0.5cm}"))
-        doc.append(NoEscape(f"\\textbf{{Responsável Técnico:}} {self.config.engineer_name}\\\\"))
-        doc.append(NoEscape(f"\\textbf{{CREA:}} {self.config.crea_number}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{Responsável Técnico:}} {escape_latex(self.config.engineer_name)}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{CREA:}} {escape_latex(self.config.crea_number)}\\\\"))
         doc.append(NoEscape(f"\\textbf{{Data:}} {datetime.now().strftime('%B %Y')}\\\\"))
-        doc.append(NoEscape(f"\\textbf{{Localização:}} {self.config.location}\\\\"))
-        doc.append(NoEscape(f"\\textbf{{Endereço:}} {self.config.address}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{Localização:}} {escape_latex(self.config.location)}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{Endereço:}} {escape_latex(self.config.address)}\\\\"))
         doc.append(NoEscape(r"\textbf{Software:} GreTA® - Sistema de Análise Termográfica\\"))
         doc.append(NoEscape(r"\end{center}"))
         doc.append(NoEscape(r"\rule{\linewidth}{0.5pt}"))
@@ -355,11 +355,11 @@ RoyalBlue]
         """Add client data section."""
         with doc.create(pl.Section("Dados do Cliente")):
             doc.append(bold("Cliente: "))
-            doc.append(f"{self.config.client_name}\n\n")
+            doc.append(f"{escape_latex(self.config.client_name)}\n\n")
             doc.append(bold("Área: "))
-            doc.append(f"{self.config.area_name}\n\n")
+            doc.append(f"{escape_latex(self.config.area_name)}\n\n")
             doc.append(bold("Localização: "))
-            doc.append(f"{self.config.location}\n\n")
+            doc.append(f"{escape_latex(self.config.location)}\n\n")
 
     def _add_area_overview(self, doc: pl.Document) -> None:
         """Add area overview section with orthophoto images."""
@@ -389,13 +389,13 @@ RoyalBlue]
             # Orthophoto overview (use relative path)
             ortho_path = "report_images/ortho.png"
             with doc.create(pl.Figure(position="h!")) as fig:
-                fig.add_image(ortho_path, width=NoEscape(r"0.9\textwidth"))
+                fig.add_image(ortho_path, width=NoEscape(r"0.75\textwidth"))
                 fig.add_caption("Ortofoto da área inspecionada")
 
             # Layer map (use relative path)
             layer_path = "report_images/layer_img.pdf"
             with doc.create(pl.Figure(position="h!")) as fig:
-                fig.add_image(layer_path, width=NoEscape(r"0.9\textwidth"))
+                fig.add_image(layer_path, width=NoEscape(r"0.75\textwidth"))
                 fig.add_caption("Mapa de rastreadores e defeitos detectados")
 
     def _add_defect_summary_table(self, doc: pl.Document) -> None:
@@ -403,19 +403,28 @@ RoyalBlue]
         if not self.panels_with_defects:
             return
 
-        # Flatten panel defects into list of (panel_id, defect_type, coords)
+        # Flatten panel defects into list of (defect_type_order, defect_label, column, row, panel_id, coords)
+        # Order: by defect class, then by column, then by row
         defect_rows = []
-        for panel in sorted(self.panels_with_defects, key=lambda p: (p.column, p.row)):
-            for defect_type_attr, defect_label in [
-                ("hotspots", "Pontos Quentes (Hot Spots)"),
-                ("faulty_diodes", "Diodos de Bypass Queimados"),
-                ("offline_panels", "Painéis Desligados"),
-            ]:
+        defect_type_order = {
+            "hotspots": (0, "Pontos Quentes (Hot Spots)"),
+            "faulty_diodes": (1, "Diodos de Bypass Queimados"),
+            "offline_panels": (2, "Painéis Desligados"),
+        }
+
+        for panel in self.panels_with_defects:
+            for defect_type_attr, (order, defect_label) in defect_type_order.items():
                 defects = getattr(panel, defect_type_attr, [])
                 for defect in defects:
                     coords = defect.panel_centroid_geospatial
                     coords_str = f"({coords.latitude:.6f}, {coords.longitude:.6f})"
-                    defect_rows.append((defect_label, panel.panel_id, coords_str))
+                    defect_rows.append((order, defect_label, panel.column, panel.row, panel.panel_id, coords_str))
+
+        # Sort by: defect class (order), then column, then row
+        defect_rows.sort(key=lambda x: (x[0], x[2], x[3]))
+
+        # Extract display fields (defect_label, panel_id, coords_str)
+        defect_rows = [(r[1], r[4], r[5]) for r in defect_rows]
 
         # Create tables with max 35 rows each (for pagination)
         rows_per_table = 35
@@ -485,33 +494,38 @@ RoyalBlue]
         overall_caption = f"Imagens do Painel n. {row} da coluna n. {col}."
 
         # Build image paths
+        # Note: GPS matcher uses defect_type without underscores (e.g., "faultydiodes")
+        # but minimap and crop use underscores (e.g., "faulty_diodes")
+        defect_type_no_underscore = defect_type.replace("_", "")
+
         minimap_img_path = self.images_dir / f"{defect_type}_({panel.panel_id})_minimap.pdf"
         crop_img_path = self.images_dir / f"{defect_type}_({panel.panel_id})_cropped.jpg"
-        drone_img_path = self.images_dir / f"{defect_type}_({panel.panel_id}).jpg"
+        drone_img_path = self.images_dir / f"{defect_type_no_underscore}_({panel.panel_id}).jpg"
 
         # Relative paths for LaTeX
         minimap_img = f"report_images/{defect_type}_({panel.panel_id})_minimap.pdf"
         crop_img = f"report_images/{defect_type}_({panel.panel_id})_cropped.jpg"
-        drone_img = f"report_images/{defect_type}_({panel.panel_id}).jpg"
+        drone_img = f"report_images/{defect_type_no_underscore}_({panel.panel_id}).jpg"
 
-        # Create figure with subfloats
+        # Create figure with subfloats - use 0.30 width to avoid overlapping captions
         with doc.create(pl.Figure(position="h!")) as fig:
             fig.append(NoEscape(r"\centering"))
 
             if minimap_img_path.exists():
-                fig.append(NoEscape(r"\subfloat[Mapa de Contexto]{\includegraphics[width=0.31\linewidth]{" + minimap_img + r"}}"))
+                fig.append(NoEscape(r"\subfloat[Mapa de Contexto]{\includegraphics[width=0.30\linewidth]{" + minimap_img + r"}}"))
                 fig.append(NoEscape(r"\hfill"))
 
             if crop_img_path.exists():
-                fig.append(NoEscape(r"\subfloat[Localização do Problema]{\includegraphics[width=0.31\linewidth]{" + crop_img + r"}}"))
+                fig.append(NoEscape(r"\subfloat[Localização do Problema]{\includegraphics[width=0.30\linewidth]{" + crop_img + r"}}"))
                 fig.append(NoEscape(r"\hfill"))
 
             if drone_img_path.exists():
-                fig.append(NoEscape(r"\subfloat[Imagem Original do Drone]{\includegraphics[width=0.31\linewidth]{" + drone_img + r"}}"))
+                fig.append(NoEscape(r"\subfloat[Imagem Original do Drone]{\includegraphics[width=0.30\linewidth]{" + drone_img + r"}}"))
 
             fig.append(NoEscape(r"\caption{" + overall_caption + r"}"))
 
         doc.append(NoEscape(r"\FloatBarrier"))
+        doc.append(NoEscape(r"\vspace{0.5cm}"))  # Add spacing to prevent legend overlap
 
         # Add descriptive text
         panel_text = text_template.format(panel_id=panel.panel_id)
@@ -768,7 +782,10 @@ RoyalBlue]
                 time_str = f"{time_val:.2f}s"
             else:
                 time_str = str(time_val)
-            doc.append(NoEscape(f"{step} & {time_str} \\\\"))
+            # Escape LaTeX special characters in step names (underscores, etc.)
+            step_escaped = escape_latex(str(step))
+            time_escaped = escape_latex(str(time_str))
+            doc.append(NoEscape(f"{step_escaped} & {time_escaped} \\\\"))
 
         doc.append(NoEscape(r"\bottomrule"))
         doc.append(NoEscape(r"\end{tabular}"))

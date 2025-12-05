@@ -1,7 +1,14 @@
 """Application settings loaded from environment variables."""
 
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
+
+
+def get_bucket_suffix() -> str:
+    """Get bucket suffix based on ENVIRONMENT variable."""
+    env = os.getenv('ENVIRONMENT', 'prod').lower()
+    return 'dev' if env == 'dev' else 'prod'
 
 
 class Settings(BaseSettings):
@@ -20,10 +27,12 @@ class Settings(BaseSettings):
     )
 
     # ===== AWS Configuration =====
+    # Bucket names are determined by ENVIRONMENT variable (dev/prod)
     aws_region: str = "us-east-2"
-    orthos_bucket: str = "solar-orthos-prod"
-    uploads_bucket: str = "solar-uploads-prod"
-    reports_bucket: str = "solar-reports-prod"
+    orthos_bucket: str = f"solar-orthos-{get_bucket_suffix()}"
+    uploads_bucket: str = f"solar-uploads-{get_bucket_suffix()}"
+    reports_bucket: str = f"solar-reports-{get_bucket_suffix()}"
+    groundtruth_bucket: str = f"solar-groundtruth-{get_bucket_suffix()}"
 
     # ===== Job Parameters (from AWS Batch environment) =====
     project_id: str
@@ -58,6 +67,39 @@ class Settings(BaseSettings):
     work_dir: Path = Path("/tmp/report_work")
 
     def __init__(self, **kwargs):  # type: ignore
+        # Handle backward compatibility with old environment variable names
+        # Old: PROJECT_ID, ORG_ID -> New: SOLAR_PROJECT_ID, SOLAR_USER_ID
+        if 'project_id' not in kwargs and not os.getenv('SOLAR_PROJECT_ID'):
+            project_id = os.getenv('PROJECT_ID')
+            if project_id:
+                kwargs['project_id'] = project_id
+
+        if 'user_id' not in kwargs and not os.getenv('SOLAR_USER_ID'):
+            user_id = os.getenv('ORG_ID') or os.getenv('USER_ID')
+            if user_id:
+                kwargs['user_id'] = user_id
+
+        # Handle backward compatibility for bucket names (without SOLAR_ prefix)
+        if 'orthos_bucket' not in kwargs and not os.getenv('SOLAR_ORTHOS_BUCKET'):
+            orthos_bucket = os.getenv('ORTHOS_BUCKET')
+            if orthos_bucket:
+                kwargs['orthos_bucket'] = orthos_bucket
+
+        if 'uploads_bucket' not in kwargs and not os.getenv('SOLAR_UPLOADS_BUCKET'):
+            uploads_bucket = os.getenv('UPLOADS_BUCKET')
+            if uploads_bucket:
+                kwargs['uploads_bucket'] = uploads_bucket
+
+        if 'reports_bucket' not in kwargs and not os.getenv('SOLAR_REPORTS_BUCKET'):
+            reports_bucket = os.getenv('REPORTS_BUCKET')
+            if reports_bucket:
+                kwargs['reports_bucket'] = reports_bucket
+
+        if 'aws_region' not in kwargs and not os.getenv('SOLAR_AWS_REGION'):
+            aws_region = os.getenv('AWS_DEFAULT_REGION')
+            if aws_region:
+                kwargs['aws_region'] = aws_region
+
         super().__init__(**kwargs)
         # Ensure work directory exists
         self.work_dir.mkdir(parents=True, exist_ok=True)

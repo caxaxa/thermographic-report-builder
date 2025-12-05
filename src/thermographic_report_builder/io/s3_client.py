@@ -100,6 +100,9 @@ class S3Client:
         """
         Download defect_labels.json from S3.
 
+        Downloads from groundtruth bucket (human-reviewed annotations from annotation tool).
+        This ensures the report uses the latest reviewed annotations, not the raw inference output.
+
         Args:
             local_path: Local path to save the file
 
@@ -109,8 +112,9 @@ class S3Client:
         Raises:
             S3DownloadError: If download fails
         """
-        key = f"{settings.user_id}/projects/{settings.project_id}/defect_labels.json"
-        bucket = settings.reports_bucket
+        # Use groundtruth bucket - this has the human-reviewed annotations from the annotation tool
+        key = f"{settings.user_id}/projects/{settings.project_id}/groundtruth/defect_labels.json"
+        bucket = settings.groundtruth_bucket
 
         logger.info(f"Downloading defect labels from s3://{bucket}/{key}")
 

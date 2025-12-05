@@ -25,11 +25,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-lang-portuguese \
     # Additional packages: geometry, fancyhdr, subfig, booktabs, xcolor, tikz
     texlive-latex-extra \
+    # Fonts: lmodern, etc.
+    texlive-fonts-recommended \
+    lmodern \
+    fonts-lmodern \
     # Ghostscript for PDF compression
     ghostscript \
     # OpenCV dependencies (minimal)
     libgl1 \
     libglib2.0-0 \
+    && mktexlsr \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 

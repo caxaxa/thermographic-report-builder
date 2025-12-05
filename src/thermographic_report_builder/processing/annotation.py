@@ -92,8 +92,31 @@ def create_layer_image(
     from reportlab.graphics.shapes import Drawing, Rect, Polygon, String
     from reportlab.lib import colors
     from reportlab.graphics import renderPDF
+    import numpy as np
 
     logger.info(f"Creating layer image: {img_width}x{img_height} px")
+
+    # Log panel bbox stats to verify alignment
+    if panel_grid:
+        widths = [p.bbox.width for p in panel_grid.values()]
+        heights = [p.bbox.height for p in panel_grid.values()]
+        lefts = [p.bbox.left for p in panel_grid.values()]
+        unique_lefts = len(set(round(l, 1) for l in lefts))
+        logger.info(
+            "create_layer_image received: %d panels, width=[min=%.1f, median=%.1f, max=%.1f], "
+            "height=[min=%.1f, median=%.1f, max=%.1f], unique_lefts=%d",
+            len(panel_grid),
+            min(widths), float(np.median(widths)), max(widths),
+            min(heights), float(np.median(heights)), max(heights),
+            unique_lefts,
+        )
+        # Log first 5 panels' exact coordinates for verification
+        sample_panels = list(panel_grid.values())[:5]
+        for p in sample_panels:
+            logger.info(
+                "DRAW COORDS panel %s: left=%.1f, top=%.1f, width=%.1f, height=%.1f",
+                p.panel_id, p.bbox.left, p.bbox.top, p.bbox.width, p.bbox.height
+            )
 
     # Create drawing (convert coordinates: OpenCV top-left to ReportLab bottom-left)
     drawing = Drawing(img_width, img_height)

@@ -232,10 +232,73 @@ const reportBuilderJob = new batch.JobDefinition(this, 'ReportBuilderJob', {
 4. **Annotate Orthophoto** - Draw bounding boxes on overview image
 5. **Create Layer Map** - Generate vectorized PDF with panel grid
 6. **Crop Defect Regions** - Extract detailed views of each defect
-7. **Match GPS Images** - Find closest raw thermal image for each defect
+7. **Match GPS Images** - Find closest raw thermal image for each defect (with north-orientation)
 8. **Generate PDF** - Create LaTeX document and compile to PDF
 9. **Export Metrics** - Calculate statistics and export to JSON/CSV
 10. **Upload Results** - Push all artifacts to S3
+
+## Panel Numbering System
+
+The report builder uses a **column-first numbering system** that groups panels spatially:
+
+### Grouping Logic
+
+1. **Columns**: Panels within 1 panel width horizontally are grouped into the same column
+   - Columns are numbered 1, 2, 3... from **left to right**
+
+2. **Rows within columns**: Panels are numbered top to bottom within each column
+   - Rows are numbered 1, 2, 3... from **top to bottom**
+
+3. **Tracker breaks**: If the vertical gap between panels exceeds 3 panel heights, a new tracker section begins
+   - Tracker A is the default (no suffix)
+   - Tracker B, C, etc. restart row numbering with a suffix
+
+### Panel ID Format
+
+| Scenario | Format | Example | Meaning |
+|----------|--------|---------|---------|
+| Tracker A (default) | `Col-Row` | `3-45` | Column 3, Row 45 |
+| Tracker B | `Col-RowB` | `3-1B` | Column 3, Row 1 in Tracker B |
+| Tracker C | `Col-RowC` | `5-12C` | Column 5, Row 12 in Tracker C |
+
+### Configuration
+
+| Constant | Default | Description |
+|----------|---------|-------------|
+| `COLUMN_TOLERANCE` | `1.0` | Panels within this many panel widths are in the same column |
+| `TRACKER_GAP_THRESHOLD` | `3.0` | Vertical gap (in panel heights) that triggers a new tracker |
+
+## Image Orientation (North-Up)
+
+Raw thermal images from the drone are automatically rotated to ensure **north is at the top** of the image.
+
+### How It Works
+
+1. Images are sorted by filename (which reflects capture order)
+2. For each consecutive pair of images, GPS coordinates are compared:
+   - If latitude **decreases** → drone is flying **south** → rotate image 180°
+   - If latitude **increases** → drone is flying **north** → no rotation needed
+
+3. The rotation is applied before saving images to the report
+
+### Why This Matters
+
+Drone thermal cameras typically capture images with the drone's heading at the top. When flying south, "south" appears at the top of the frame. Rotating 180° ensures consistent north-up orientation across all images in the report.
+
+## Defect Ordering in Reports
+
+Defects are ordered consistently throughout the report:
+
+1. **By defect class** (in order):
+   - Pontos Quentes (Hot Spots)
+   - Diodos de Bypass Queimados (Faulty Diodes)
+   - Painéis Desligados (Offline Panels)
+
+2. **By column** (left to right)
+
+3. **By row** (top to bottom within each column)
+
+This ordering applies to both the summary table and the detailed sections.
 
 ## Troubleshooting
 
@@ -245,6 +308,9 @@ const reportBuilderJob = new batch.JobDefinition(this, 'ReportBuilderJob', {
 | No GPS matches | Raw thermal images missing EXIF or not uploaded | Confirm `s3://solar-uploads-{env}/{user}/projects/{project}/images/` contains original frames with GPS metadata |
 | LaTeX build failure | Non-ASCII characters or missing packages | Inspect CloudWatch logs, ensure env vars are UTF-8, rebuild image only after confirming required `texlive-*` packages |
 | Blank overview/crops | Orthophoto download failed or path mismatch | Confirm IAM role permissions and bucket names (`SOLAR_ORTHOS_BUCKET`, `SOLAR_UPLOADS_BUCKET`); enable `SOLAR_LOG_LEVEL=DEBUG` for verbose traces |
+| Wrong panel numbering | Panel annotations not aligned or tolerances off | Check that panels are properly aligned in annotation tool; adjust `COLUMN_TOLERANCE` or `TRACKER_GAP_THRESHOLD` if needed |
+| Images not rotated correctly | Flight path not purely north/south | The rotation algorithm assumes linear north/south flight paths; complex flight patterns may need manual review |
+| All images rotated same direction | Single-direction flight | This is expected behavior for a single-pass flight; the algorithm correctly detects consistent flight direction |
 
 ## Monitoring
 
