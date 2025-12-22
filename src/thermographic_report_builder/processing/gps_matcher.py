@@ -136,11 +136,35 @@ class GPSMatcher:
                 for defect in defects:
                     defect_center_px = defect.bbox.center
 
-                    # Try camera reprojection first, fallback to GPS
-                    match = self._find_best_match(
-                        ortho_x=defect_center_px[0],
-                        ortho_y=defect_center_px[1],
-                        temp_dir=temp_dir,
+                    # STEP 1: Use legacy GPS matching to find closest image (proven to work)
+                    defect_lon, defect_lat = self.geo_converter.pixel_to_lonlat(defect_center_px)
+                    closest_image = self._find_closest_image(defect_lat, defect_lon)
+
+                    if not closest_image:
+                        logger.warning(f"No matching image found for {panel.panel_id}")
+                        continue
+
+                    image_path = Path(closest_image["path"])
+                    image_name = image_path.name
+
+                    # STEP 2: Use camera reprojection to get pixel coordinates for annotation
+                    pixel_x, pixel_y = None, None
+                    if self.camera_projector.available:
+                        projection = self.camera_projector.project_to_specific_image(
+                            ortho_x=defect_center_px[0],
+                            ortho_y=defect_center_px[1],
+                            image_name=image_name,
+                        )
+                        if projection:
+                            pixel_x, pixel_y = projection
+
+                    # Create match object
+                    match = DefectMatch(
+                        image_name=image_name,
+                        image_path=image_path,
+                        method="gps" if pixel_x is None else "reprojection",
+                        pixel_x=pixel_x,
+                        pixel_y=pixel_y,
                     )
 
                     if match:

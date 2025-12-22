@@ -214,6 +214,61 @@ class CameraProjector:
         matches = self.project_ortho_to_raw(ortho_x, ortho_y, elevation)
         return matches[0] if matches else None
 
+    def project_to_specific_image(
+        self,
+        ortho_x: float,
+        ortho_y: float,
+        image_name: str,
+        elevation: float = 0.0,
+    ) -> Optional[Tuple[float, float]]:
+        """
+        Project orthophoto coordinates to a specific raw image.
+
+        This is used when the image has already been selected (e.g., by GPS matching)
+        and we just need the pixel coordinates for annotation.
+
+        Args:
+            ortho_x: X coordinate in orthophoto (pixels)
+            ortho_y: Y coordinate in orthophoto (pixels)
+            image_name: Name of the target image (e.g., "DJI_20230612111751_0126_T.JPG")
+            elevation: Ground elevation (meters), defaults to estimated ground level
+
+        Returns:
+            (pixel_x, pixel_y) tuple or None if projection fails
+        """
+        if not self.available:
+            return None
+
+        # Get shot data for this image
+        shot = self.shots.get(image_name)
+        if shot is None:
+            logger.debug(f"Image {image_name} not found in reconstruction")
+            return None
+
+        # Use estimated ground elevation if not provided
+        if elevation == 0.0:
+            elevation = self._ground_elevation
+
+        # Convert orthophoto pixel to world coordinates
+        world_x, world_y = self._ortho_to_world(ortho_x, ortho_y)
+        world_point = np.array([world_x, world_y, elevation])
+
+        # Project to camera
+        try:
+            pixel_coords = self._project_to_camera(world_point, shot)
+            if pixel_coords is not None:
+                px, py = pixel_coords
+                # Check if within image bounds
+                if 0 <= px < self.image_width and 0 <= py < self.image_height:
+                    logger.debug(f"Projected to {image_name}: ({px:.1f}, {py:.1f})")
+                    return px, py
+                else:
+                    logger.debug(f"Projection to {image_name} out of bounds: ({px:.1f}, {py:.1f})")
+        except Exception as e:
+            logger.debug(f"Projection to {image_name} failed: {e}")
+
+        return None
+
     def _ortho_to_world(self, ortho_x: float, ortho_y: float) -> Tuple[float, float]:
         """Convert orthophoto pixel to OpenSfM local ENU coordinates.
 
