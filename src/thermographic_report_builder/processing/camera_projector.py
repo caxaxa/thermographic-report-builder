@@ -111,6 +111,16 @@ class CameraProjector:
                     f"Reference point UTM: ({self._ref_utm_x:.2f}, {self._ref_utm_y:.2f})"
                 )
 
+        # Estimate ground elevation from reconstruction 3D points
+        self._ground_elevation = 0.0
+        points = reconstruction.get("points", {})
+        if points:
+            # Get median Z coordinate of 3D points as ground elevation estimate
+            z_coords = [p.get("coordinates", [0, 0, 0])[2] for p in points.values() if "coordinates" in p]
+            if z_coords:
+                self._ground_elevation = float(np.median(z_coords))
+                logger.info(f"Estimated ground elevation: {self._ground_elevation:.1f}m")
+
         self.available = len(self.shots) > 0
 
         if self.available:
