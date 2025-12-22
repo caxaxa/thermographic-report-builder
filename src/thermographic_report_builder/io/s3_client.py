@@ -286,6 +286,44 @@ class S3Client:
             logger.error(error_msg)
             raise S3UploadError(error_msg) from e
 
+    def download_reconstruction_json(self, local_path: Path) -> Path | None:
+        """
+        Download OpenSfM reconstruction.json for camera reprojection.
+
+        This file contains camera poses and calibration data that enables
+        precise mapping from orthophoto coordinates back to raw image pixels.
+        Only available for projects processed after the reconstruction upload
+        feature was enabled.
+
+        Args:
+            local_path: Local path to save the file
+
+        Returns:
+            Path to downloaded file, or None if not available
+
+        Note:
+            This is optional - older projects won't have this file.
+            The report builder falls back to GPS matching when not available.
+        """
+        key = f"{settings.user_id}/projects/{settings.project_id}/opensfm/reconstruction.json"
+        bucket = settings.orthos_bucket
+
+        logger.info(f"Attempting to download reconstruction.json from s3://{bucket}/{key}")
+
+        try:
+            self.s3.download_file(Bucket=bucket, Key=key, Filename=str(local_path))
+            size_mb = local_path.stat().st_size / 1_000_000
+            logger.info(f"Downloaded reconstruction.json: {size_mb:.2f} MB (camera reprojection enabled)")
+            return local_path
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchKey', '404'):
+                logger.info("reconstruction.json not found - will use GPS-only matching (older project)")
+                return None
+            else:
+                logger.warning(f"Failed to download reconstruction.json: {e}")
+                return None
+
     def download_odm_stats(self, output_dir: Path) -> Path:
         """
         Download ODM statistics and visualizations from S3.

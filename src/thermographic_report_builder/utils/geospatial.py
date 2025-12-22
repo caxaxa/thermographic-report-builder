@@ -29,6 +29,7 @@ class PixelToLatLonConverter:
             raster_crs: CRS definition reported by the orthophoto
         """
         self._affine = affine_transform
+        self.transform = affine_transform  # Public alias for camera_projector
 
         self._target_crs = CRS.from_epsg(4326)
         self._transformer: Transformer | None = None

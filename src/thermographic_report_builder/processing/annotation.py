@@ -82,6 +82,7 @@ def create_layer_image(
     Create vectorized layer image showing panel grid and defects.
 
     This generates a PDF with panel outlines and defect markers.
+    The PDF is scaled to fit within A4 page dimensions while maintaining aspect ratio.
 
     Args:
         panel_grid: Dictionary of panels
@@ -118,36 +119,61 @@ def create_layer_image(
                 p.panel_id, p.bbox.left, p.bbox.top, p.bbox.width, p.bbox.height
             )
 
-    # Create drawing (convert coordinates: OpenCV top-left to ReportLab bottom-left)
-    drawing = Drawing(img_width, img_height)
+    # Scale to fit within A4 page dimensions (in points: 1 inch = 72 points)
+    # A4 is 595 x 842 points, leave margins for LaTeX embedding
+    max_pdf_width = 500  # points (~7 inches)
+    max_pdf_height = 700  # points (~9.7 inches)
+
+    # Calculate scale factor to fit within bounds while maintaining aspect ratio
+    scale_x = max_pdf_width / img_width
+    scale_y = max_pdf_height / img_height
+    scale_factor = min(scale_x, scale_y)
+
+    pdf_width = img_width * scale_factor
+    pdf_height = img_height * scale_factor
+
+    logger.info(f"Scaling layer image by {scale_factor:.4f}: {img_width}x{img_height}px -> {pdf_width:.0f}x{pdf_height:.0f}pt")
+
+    # Create drawing with scaled dimensions
+    drawing = Drawing(pdf_width, pdf_height)
+
+    # Scale font size based on the scale factor (keep readable but proportional)
+    base_font_size = 12
+    scaled_font_size = max(6, min(12, base_font_size * scale_factor * 10))  # Keep between 6-12pt
 
     # Draw panels and defects
     for panel in panel_grid.values():
         bbox = panel.bbox
 
-        # Convert y-coordinate (flip vertical axis)
-        y_bottom = img_height - bbox.bottom
+        # Scale coordinates to PDF dimensions
+        scaled_left = bbox.left * scale_factor
+        scaled_width = bbox.width * scale_factor
+        scaled_height = bbox.height * scale_factor
+
+        # Convert y-coordinate (flip vertical axis) and scale
+        y_bottom = (img_height - bbox.bottom) * scale_factor
 
         # Draw panel outline (gray)
         if not panel.has_defects:
-            panel_rect = Rect(bbox.left, y_bottom, bbox.width, bbox.height)
+            panel_rect = Rect(scaled_left, y_bottom, scaled_width, scaled_height)
             panel_rect.fillColor = None
             panel_rect.strokeColor = colors.gray
-            panel_rect.strokeWidth = 1
+            panel_rect.strokeWidth = max(0.5, 1 * scale_factor)
             drawing.add(panel_rect)
         else:
             # Panels with defects: red fill at 50% opacity
-            panel_rect = Rect(bbox.left, y_bottom, bbox.width, bbox.height)
+            panel_rect = Rect(scaled_left, y_bottom, scaled_width, scaled_height)
             panel_rect.fillColor = colors.Color(1, 0, 0, alpha=0.5)
             panel_rect.strokeColor = colors.red
-            panel_rect.strokeWidth = 2
+            panel_rect.strokeWidth = max(1, 2 * scale_factor)
             drawing.add(panel_rect)
 
             # Add panel number label
             center_x, center_y = bbox.center
-            center_y_flipped = img_height - center_y
-            label = String(center_x, center_y_flipped, panel.panel_id)
-            label.fontSize = 12
+            scaled_center_x = center_x * scale_factor
+            scaled_center_y = (img_height - center_y) * scale_factor
+            label = String(scaled_center_x, scaled_center_y, panel.panel_id)
+            label.fontSize = scaled_font_size
             label.fillColor = colors.black
             drawing.add(label)
 

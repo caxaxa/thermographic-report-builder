@@ -4,14 +4,20 @@ FROM python:3.11-slim as builder
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies
 WORKDIR /build
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
+
+# Clone thermal_parser to get the DJI SDK plugins
+RUN git clone --depth 1 https://github.com/SanNianYiSi/thermal_parser.git /build/thermal_parser_repo
+
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip wheel --no-cache-dir --wheel-dir /build/wheels .
+    pip wheel --no-cache-dir --wheel-dir /build/wheels . && \
+    pip wheel --no-cache-dir --wheel-dir /build/wheels git+https://github.com/SanNianYiSi/thermal_parser.git
 
 # ===== Final stage =====
 FROM python:3.11-slim
@@ -34,6 +40,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # OpenCV dependencies (minimal)
     libgl1 \
     libglib2.0-0 \
+    # exiftool for thermal_parser (reads EXIF metadata from thermal images)
+    libimage-exiftool-perl \
+    # libgomp for DJI Thermal SDK (OpenMP parallel processing)
+    libgomp1 \
     && mktexlsr \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
@@ -47,19 +57,29 @@ WORKDIR /app
 
 # Copy wheels from builder and install
 COPY --from=builder /build/wheels /tmp/wheels
+# Remove numpy 2.4+ wheels (opencv-python requires numpy<2.3.0)
+RUN rm -f /tmp/wheels/numpy-2.[4-9]*.whl 2>/dev/null || true
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir /tmp/wheels/*.whl && \
     rm -rf /tmp/wheels
 
-# Copy application code
-COPY src/ /app/src/
-COPY pyproject.toml README.md /app/
+# Copy DJI Thermal SDK plugins from thermal_parser repo
+# These are required for temperature extraction from DJI R-JPEG images
+COPY --from=builder /build/thermal_parser_repo/plugins /usr/local/lib/python3.11/site-packages/plugins
+
+# Patch thermal_parser to use SDK v1.4 instead of v1.7 for compatibility with older M30T images
+# SDK v1.7 returns error -16 for images captured before 2024
+RUN sed -i 's/dji_thermal_sdk_v1.7_20241205/dji_thermal_sdk_v1.4_20220929/g' /usr/local/lib/python3.11/site-packages/thermal_parser/thermal.py
+
+# Copy application code and set ownership
+COPY --chown=appuser:appuser src/ /app/src/
+COPY --chown=appuser:appuser pyproject.toml README.md /app/
 
 # Install package in editable mode
 RUN pip install --no-cache-dir -e .
 
 # Create assets directory for logo images
-RUN mkdir -p /app/assets && chown appuser:appuser /app/assets
+RUN mkdir -p /app/assets && chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser

@@ -135,7 +135,8 @@ def _create_mini_map(
     Create a mini-map PDF showing where the crop came from.
 
     Recreates the layer drawing with panels and defects, then overlays
-    a blue rectangle indicating the crop region.
+    a blue rectangle indicating the crop region. The PDF is scaled to fit
+    within A4 page dimensions while maintaining aspect ratio.
 
     Args:
         panel_grid: Dictionary of all panels (for recreating layer)
@@ -148,21 +149,38 @@ def _create_mini_map(
     """
     from reportlab.graphics.shapes import Polygon, String
 
-    # Create a drawing matching the original image dimensions
-    drawing = Drawing(img_w, img_h)
+    # Scale to fit within A4 page dimensions (in points: 1 inch = 72 points)
+    # A4 is 595 x 842 points, leave margins for LaTeX embedding
+    max_pdf_width = 500  # points (~7 inches)
+    max_pdf_height = 700  # points (~9.7 inches)
+
+    # Calculate scale factor to fit within bounds while maintaining aspect ratio
+    scale_x = max_pdf_width / img_w
+    scale_y = max_pdf_height / img_h
+    scale_factor = min(scale_x, scale_y)
+
+    pdf_width = img_w * scale_factor
+    pdf_height = img_h * scale_factor
+
+    # Create a drawing with scaled dimensions
+    drawing = Drawing(pdf_width, pdf_height)
 
     # Add white background
-    drawing.add(Rect(0, 0, img_w, img_h, fillColor=colors.white, strokeColor=None))
+    drawing.add(Rect(0, 0, pdf_width, pdf_height, fillColor=colors.white, strokeColor=None))
+
+    # Scale font size (keep readable but proportional)
+    base_font_size = 20
+    scaled_font_size = max(6, min(14, base_font_size * scale_factor * 10))
 
     # Recreate the layer by drawing panels and defects
     # (Similar to what create_layer_image does)
     for panel in panel_grid.values():
         bbox = panel.bbox
-        # Transform from top-left to bottom-left origin
-        x_draw = bbox.left
-        y_draw = img_h - bbox.top - bbox.height
-        w_draw = bbox.width
-        h_draw = bbox.height
+        # Transform from top-left to bottom-left origin and scale
+        x_draw = bbox.left * scale_factor
+        y_draw = (img_h - bbox.top - bbox.height) * scale_factor
+        w_draw = bbox.width * scale_factor
+        h_draw = bbox.height * scale_factor
 
         # Create polygon points for panel rectangle
         pts = [x_draw, y_draw, x_draw + w_draw, y_draw,
@@ -176,23 +194,26 @@ def _create_mini_map(
             fill_color = None
             stroke_color = colors.black
 
-        drawing.add(Polygon(pts, fillColor=fill_color, strokeColor=stroke_color, strokeWidth=1))
+        stroke_width = max(0.5, 1 * scale_factor)
+        drawing.add(Polygon(pts, fillColor=fill_color, strokeColor=stroke_color, strokeWidth=stroke_width))
 
         # Add panel label
         label_str = f"{panel.column}-{panel.row}"
-        drawing.add(String(x_draw, y_draw + h_draw + 5, label_str, fontSize=20, fillColor=colors.black))
+        drawing.add(String(x_draw, y_draw + h_draw + 2 * scale_factor, label_str, fontSize=scaled_font_size, fillColor=colors.black))
 
-    # Calculate crop rectangle coordinates
+    # Calculate crop rectangle coordinates (scaled)
     # Note: ReportLab uses bottom-left origin, so transform y coordinates
-    rect_x = x1
-    rect_y = img_h - y2  # Transform y coordinate
-    rect_width = x2 - x1
-    rect_height = y2 - y1
+    rect_x = x1 * scale_factor
+    rect_y = (img_h - y2) * scale_factor  # Transform y coordinate
+    rect_width = (x2 - x1) * scale_factor
+    rect_height = (y2 - y1) * scale_factor
 
     # Add blue rectangle for crop region (thick stroke, no fill)
+    # Scale stroke width proportionally
+    blue_stroke_width = max(3, 50 * scale_factor)
     drawing.add(
         Rect(rect_x, rect_y, rect_width, rect_height,
-             strokeColor=colors.blue, strokeWidth=50, fillColor=None)
+             strokeColor=colors.blue, strokeWidth=blue_stroke_width, fillColor=None)
     )
 
     # Save as PDF

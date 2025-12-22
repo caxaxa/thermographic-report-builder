@@ -3,7 +3,7 @@
 import csv
 import json
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 from datetime import datetime
 
 from ..models.defect import Panel
@@ -11,6 +11,13 @@ from ..models.report import DefectMetrics
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Defect class display names (Portuguese)
+DEFECT_DISPLAY_NAMES = {
+    "hotspots": "Ponto Quente (Hot Spot)",
+    "faultydiodes": "Diodo de Bypass Queimado",
+    "offlinepanels": "Painel Desligado",
+}
 
 
 def calculate_metrics(panel_grid: Dict[Tuple[int, int], Panel]) -> DefectMetrics:
@@ -45,6 +52,9 @@ def export_metrics_json(
     panel_grid: Dict[Tuple[int, int], Panel],
     output_path: Path,
     include_details: bool = True,
+    ortho_width: Optional[int] = None,
+    ortho_height: Optional[int] = None,
+    ortho_scale_factor: float = 0.25,
 ) -> Path:
     """
     Export metrics to JSON file.
@@ -53,6 +63,9 @@ def export_metrics_json(
         panel_grid: Dictionary of panels
         output_path: Path to save JSON file
         include_details: If True, include per-panel details
+        ortho_width: Original orthophoto width (before scaling)
+        ortho_height: Original orthophoto height (before scaling)
+        ortho_scale_factor: Scale factor applied to create ortho.png
 
     Returns:
         Path to saved file
@@ -65,6 +78,16 @@ def export_metrics_json(
         "export_date": datetime.utcnow().isoformat(),
         "summary": metrics.to_dict(),
     }
+
+    # Add ortho.png dimensions for interactive defect map
+    if ortho_width and ortho_height:
+        data["ortho_dimensions"] = {
+            "original_width": ortho_width,
+            "original_height": ortho_height,
+            "scale_factor": ortho_scale_factor,
+            "scaled_width": int(ortho_width * ortho_scale_factor),
+            "scaled_height": int(ortho_height * ortho_scale_factor),
+        }
 
     if include_details:
         # Add per-panel breakdown
@@ -83,6 +106,48 @@ def export_metrics_json(
                     }
                 )
         data["panels_with_defects"] = panels_list
+
+        # Add per-defect details for interactive map
+        defects_list = []
+        defect_counter = 0
+        for (col, row), panel in sorted(panel_grid.items()):
+            for defect_type_attr, defect_class in [
+                ("hotspots", "hotspots"),
+                ("faulty_diodes", "faultydiodes"),
+                ("offline_panels", "offlinepanels"),
+            ]:
+                defects = getattr(panel, defect_type_attr, [])
+                for defect in defects:
+                    defect_counter += 1
+                    defect_entry = {
+                        "defect_id": f"defect_{defect_counter}",
+                        "panel_id": panel.panel_id,
+                        "column": col,
+                        "row": row,
+                        "defect_class": defect_class,
+                        "display_class": DEFECT_DISPLAY_NAMES.get(defect_class, defect_class),
+                        "latitude": defect.panel_centroid_geospatial.latitude,
+                        "longitude": defect.panel_centroid_geospatial.longitude,
+                        # Bounding box in original coordinates
+                        "bbox_original": {
+                            "left": round(defect.bbox.left, 1),
+                            "top": round(defect.bbox.top, 1),
+                            "width": round(defect.bbox.width, 1),
+                            "height": round(defect.bbox.height, 1),
+                        },
+                    }
+                    # Add scaled bbox for ortho.png if dimensions provided
+                    if ortho_width and ortho_height:
+                        defect_entry["bbox_scaled"] = {
+                            "left": round(defect.bbox.left * ortho_scale_factor, 1),
+                            "top": round(defect.bbox.top * ortho_scale_factor, 1),
+                            "width": round(defect.bbox.width * ortho_scale_factor, 1),
+                            "height": round(defect.bbox.height * ortho_scale_factor, 1),
+                        }
+                    defects_list.append(defect_entry)
+
+        data["defects"] = defects_list
+        logger.info(f"Added {len(defects_list)} defects to metrics JSON")
 
     # Save JSON
     with open(output_path, "w", encoding="utf-8") as f:
@@ -150,4 +215,129 @@ def export_metrics_csv(
             )
 
     logger.info(f"Exported metrics CSV: {output_path.stat().st_size / 1_000:.1f} KB")
+    return output_path
+
+
+def export_panel_grid_json(
+    panel_grid: Dict[Tuple[int, int], Panel],
+    output_path: Path,
+    ortho_width: int,
+    ortho_height: int,
+    ortho_scale_factor: float = 0.25,
+) -> Path:
+    """
+    Export complete panel grid to JSON for interactive defect map.
+
+    This file contains all panels with their bounding boxes and defects,
+    using the report's panel_id format (e.g., "3-45", "1-2B") so the
+    interactive map matches exactly what appears in the PDF report.
+
+    Args:
+        panel_grid: Dictionary of panels from DefectMapper
+        output_path: Path to save JSON file
+        ortho_width: Original orthophoto width in pixels
+        ortho_height: Original orthophoto height in pixels
+        ortho_scale_factor: Scale factor used to create ortho.png
+
+    Returns:
+        Path to saved file
+    """
+    logger.info(f"Exporting panel grid to JSON: {output_path}")
+
+    # Build list of panels with defects (for the interactive map)
+    panels_with_defects = []
+
+    for (col, row), panel in sorted(panel_grid.items()):
+        if not panel.has_defects:
+            continue
+
+        # Get geospatial coords from first defect
+        first_defect = panel.all_defects()[0]
+        lat = first_defect.panel_centroid_geospatial.latitude
+        lon = first_defect.panel_centroid_geospatial.longitude
+
+        # Build defects list for this panel
+        defects = []
+        for defect_type_attr, defect_class in [
+            ("hotspots", "hotspots"),
+            ("faulty_diodes", "faultydiodes"),
+            ("offline_panels", "offlinepanels"),
+        ]:
+            for defect in getattr(panel, defect_type_attr, []):
+                defects.append({
+                    "defect_class": defect_class,
+                    "display_class": DEFECT_DISPLAY_NAMES.get(defect_class, defect_class),
+                    "bbox": {
+                        "left": round(defect.bbox.left, 1),
+                        "top": round(defect.bbox.top, 1),
+                        "width": round(defect.bbox.width, 1),
+                        "height": round(defect.bbox.height, 1),
+                    },
+                    "bbox_scaled": {
+                        "left": round(defect.bbox.left * ortho_scale_factor, 1),
+                        "top": round(defect.bbox.top * ortho_scale_factor, 1),
+                        "width": round(defect.bbox.width * ortho_scale_factor, 1),
+                        "height": round(defect.bbox.height * ortho_scale_factor, 1),
+                    },
+                })
+
+        # Build thermal image filenames for each defect type present in this panel
+        # Naming convention: {defect_type}_({panel_id}).jpg (matches gps_matcher.py output)
+        thermal_images = {}
+        if panel.hotspots:
+            thermal_images["hotspots"] = f"hotspots_({panel.panel_id}).jpg"
+        if panel.faulty_diodes:
+            thermal_images["faultydiodes"] = f"faultydiodes_({panel.panel_id}).jpg"
+        if panel.offline_panels:
+            thermal_images["offlinepanels"] = f"offlinepanels_({panel.panel_id}).jpg"
+
+        panels_with_defects.append({
+            "panel_id": panel.panel_id,
+            "column": panel.column,
+            "row": panel.row,
+            "tracker": panel.tracker,
+            "tracker_row": panel.tracker_column,
+            "latitude": lat,
+            "longitude": lon,
+            "panel_bbox": {
+                "left": round(panel.bbox.left, 1),
+                "top": round(panel.bbox.top, 1),
+                "width": round(panel.bbox.width, 1),
+                "height": round(panel.bbox.height, 1),
+            },
+            "panel_bbox_scaled": {
+                "left": round(panel.bbox.left * ortho_scale_factor, 1),
+                "top": round(panel.bbox.top * ortho_scale_factor, 1),
+                "width": round(panel.bbox.width * ortho_scale_factor, 1),
+                "height": round(panel.bbox.height * ortho_scale_factor, 1),
+            },
+            "defect_count": panel.defect_count,
+            "hotspots_count": len(panel.hotspots),
+            "faulty_diodes_count": len(panel.faulty_diodes),
+            "offline_panels_count": len(panel.offline_panels),
+            "thermal_images": thermal_images,
+            "defects": defects,
+        })
+
+    data = {
+        "export_date": datetime.utcnow().isoformat(),
+        "ortho_dimensions": {
+            "original_width": ortho_width,
+            "original_height": ortho_height,
+            "scale_factor": ortho_scale_factor,
+            "scaled_width": int(ortho_width * ortho_scale_factor),
+            "scaled_height": int(ortho_height * ortho_scale_factor),
+        },
+        "summary": {
+            "total_panels": len(panel_grid),
+            "panels_with_defects": len(panels_with_defects),
+            "total_defects": sum(p["defect_count"] for p in panels_with_defects),
+        },
+        "panels": panels_with_defects,
+    }
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+    logger.info(f"Exported panel grid JSON with {len(panels_with_defects)} panels: {output_path.stat().st_size / 1_000:.1f} KB")
     return output_path

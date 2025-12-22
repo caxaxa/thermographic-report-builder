@@ -1,7 +1,7 @@
 """Main report builder orchestrating PDF generation."""
 
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 from datetime import datetime
 import subprocess
 
@@ -13,6 +13,7 @@ from ..models.report import ReportConfig
 from ..config import constants
 from ..utils.logger import get_logger
 from ..utils.exceptions import ReportGenerationError
+from ..processing.gps_matcher import DefectMatch
 
 logger = get_logger(__name__)
 
@@ -27,6 +28,7 @@ class ReportBuilder:
         config: ReportConfig,
         odm_stats: dict = None,
         odm_stats_dir: Path = None,
+        defect_matches: Optional[Dict[str, DefectMatch]] = None,
     ):
         """
         Initialize report builder.
@@ -37,12 +39,14 @@ class ReportBuilder:
             config: Report configuration
             odm_stats: ODM statistics dictionary (optional)
             odm_stats_dir: Directory containing ODM stats images (optional)
+            defect_matches: Dictionary of defect matches with temperature data (optional)
         """
         self.panel_grid = panel_grid
         self.images_dir = images_dir
         self.config = config
         self.odm_stats = odm_stats
         self.odm_stats_dir = odm_stats_dir
+        self.defect_matches = defect_matches or {}
 
         # Count defects
         self.panels_with_defects = [p for p in panel_grid.values() if p.has_defects]
@@ -51,10 +55,17 @@ class ReportBuilder:
         self.total_faulty_diodes = sum(len(p.faulty_diodes) for p in panel_grid.values())
         self.total_offline = sum(len(p.offline_panels) for p in panel_grid.values())
 
+        # Count temperature data
+        self.temp_data_count = sum(
+            1 for m in self.defect_matches.values()
+            if m.temperature is not None
+        )
+
         logger.info(
             f"Initialized report builder: {len(panel_grid)} panels, "
             f"{len(self.panels_with_defects)} with defects, {self.total_defects} total defects, "
-            f"ODM stats: {'available' if odm_stats else 'not available'}"
+            f"ODM stats: {'available' if odm_stats else 'not available'}, "
+            f"Temperature data: {self.temp_data_count} defects"
         )
 
     def generate_tex(self, output_path: Path) -> Path:
@@ -195,7 +206,7 @@ class ReportBuilder:
         )
         doc.preamble.append(NoEscape(r"\fancyhead[R]{Relatório Termográfico}"))
         doc.preamble.append(
-            NoEscape(r"\fancyfoot[C]{GreTA®, Versão Beta - 2025 \quad Desenvolvido por Aisol}")
+            NoEscape(r"\fancyfoot[C]{GreTA®, Versão Beta - 2026 \quad Desenvolvido por Aisol}")
         )
 
     def _add_title_page(self, doc: pl.Document) -> None:
@@ -291,7 +302,7 @@ text width=6cm,
 align=left,
 RoyalBlue]
 {
-{\fontsize{72}{86.4} \selectfont """ + datetime.now().strftime("%Y") + r"""}
+{\fontsize{72}{86.4} \selectfont 2026}
 };
 
 % Title
@@ -324,7 +335,7 @@ RoyalBlue]
         doc.append(NoEscape(r"\end{center}"))
         doc.append(NoEscape(r"\rule{\linewidth}{0.5pt}"))
         doc.append(NoEscape(r"\vfill"))
-        doc.append(NoEscape(r"\noindent\textbf{Copyright © 2025 Aisol Soluções em Inteligência Artificial.}\\"))
+        doc.append(NoEscape(r"\noindent\textbf{Copyright © 2026 Aisol Soluções em Inteligência Artificial.}\\"))
         doc.append(NoEscape(r"Todos os direitos reservados. Nenhuma parte desta publicação pode ser reproduzida, distribuída ou transmitida sem autorização prévia.\\"))
         doc.append(NoEscape(r"\vspace*{0.2cm}"))
         doc.append(NoEscape(r"\noindent\textbf{ISBN:} A definir.\\"))
@@ -501,11 +512,13 @@ RoyalBlue]
         minimap_img_path = self.images_dir / f"{defect_type}_({panel.panel_id})_minimap.pdf"
         crop_img_path = self.images_dir / f"{defect_type}_({panel.panel_id})_cropped.jpg"
         drone_img_path = self.images_dir / f"{defect_type_no_underscore}_({panel.panel_id}).jpg"
+        annotated_img_path = self.images_dir / f"{defect_type_no_underscore}_({panel.panel_id})_annotated.jpg"
 
         # Relative paths for LaTeX
         minimap_img = f"report_images/{defect_type}_({panel.panel_id})_minimap.pdf"
         crop_img = f"report_images/{defect_type}_({panel.panel_id})_cropped.jpg"
         drone_img = f"report_images/{defect_type_no_underscore}_({panel.panel_id}).jpg"
+        annotated_img = f"report_images/{defect_type_no_underscore}_({panel.panel_id})_annotated.jpg"
 
         # Create figure with subfloats - use 0.30 width to avoid overlapping captions
         with doc.create(pl.Figure(position="h!")) as fig:
@@ -527,9 +540,31 @@ RoyalBlue]
         doc.append(NoEscape(r"\FloatBarrier"))
         doc.append(NoEscape(r"\vspace{0.5cm}"))  # Add spacing to prevent legend overlap
 
+        # Add annotated thermal image with temperature data if available
+        if annotated_img_path.exists():
+            doc.append(NoEscape(r"\vspace{0.3cm}"))
+            with doc.create(pl.Figure(position="h!")) as fig:
+                fig.add_image(annotated_img, width=NoEscape(r"0.65\textwidth"))
+                fig.add_caption(f"Análise Termográfica - Painel {panel.panel_id}")
+            doc.append(NoEscape(r"\FloatBarrier"))
+
         # Add descriptive text
         panel_text = text_template.format(panel_id=panel.panel_id)
         doc.append(panel_text + "\n\n")
+
+        # Add temperature data if available (as text backup when image not present)
+        match_key = f"{defect_type}_{panel.panel_id}"
+        match = self.defect_matches.get(match_key)
+        if match and match.temperature and not annotated_img_path.exists():
+            # Only show text if we don't have the annotated image
+            temp = match.temperature
+            doc.append(NoEscape(r"\noindent\textbf{Dados de Temperatura:}\\"))
+            doc.append(NoEscape(r"\begin{itemize}"))
+            doc.append(NoEscape(f"\\item Temperatura do Defeito: {temp.defect_temp_celsius:.1f}°C"))
+            doc.append(NoEscape(f"\\item Temperatura Média do Painel: {temp.panel_avg_celsius:.1f}°C"))
+            doc.append(NoEscape(f"\\item $\\Delta$T (Diferença): {temp.delta_t:.1f}°C"))
+            doc.append(NoEscape(f"\\item Classificação: \\textbf{{{temp.severity}}}"))
+            doc.append(NoEscape(r"\end{itemize}"))
 
     def _add_defect_details(self, doc: pl.Document) -> None:
         """Add detailed section for each panel with defects."""

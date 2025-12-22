@@ -7,8 +7,8 @@ from pathlib import Path
 from .config import settings
 from .io import S3Client, load_defect_labels
 from .io.image_loader import load_orthophoto
-from .processing import DefectMapper, annotate_orthophoto, create_layer_image, crop_defect_regions, GPSMatcher
-from .report import ReportBuilder, export_metrics_json, export_metrics_csv
+from .processing import DefectMapper, annotate_orthophoto, create_layer_image, crop_defect_regions, GPSMatcher, create_dxf_layers
+from .report import ReportBuilder, export_metrics_json, export_metrics_csv, export_panel_grid_json
 from .models.report import ReportConfig
 from .models.job import JobOutput
 from .utils import setup_logging, get_logger, PixelToLatLonConverter
@@ -115,6 +115,24 @@ def main() -> int:
             output_path=images_dir / "layer_img.pdf",
         )
 
+        # ===== STEP 5.5: Create DXF layers (georeferenced CAD file) =====
+        logger.info("=" * 80)
+        logger.info("STEP 5.5: Creating DXF layers (CAD file)")
+        logger.info("=" * 80)
+
+        dxf_path = work_dir / "layers.dxf"
+        try:
+            create_dxf_layers(
+                panel_grid=panel_grid,
+                geo_converter=geo_converter,
+                output_path=dxf_path,
+                area_name=settings.area_name,
+            )
+            logger.info(f"Created DXF file: {dxf_path}")
+        except Exception as e:
+            logger.warning(f"Failed to create DXF file (continuing without it): {e}")
+            dxf_path = None
+
         # ===== STEP 6: Crop defect regions =====
         logger.info("=" * 80)
         logger.info("STEP 6: Cropping defect regions")
@@ -128,13 +146,32 @@ def main() -> int:
             scale_factor=settings.crop_downscale_factor,
         )
 
-        # ===== STEP 7: Match raw thermal images via GPS =====
+        # ===== STEP 7: Match raw thermal images (reprojection or GPS fallback) =====
         logger.info("=" * 80)
-        logger.info("STEP 7: Matching raw thermal images via GPS")
+        logger.info("STEP 7: Matching raw thermal images to defects")
         logger.info("=" * 80)
 
-        gps_matcher = GPSMatcher(s3_client, geo_converter)
-        matched_count = gps_matcher.match_images_to_panels(
+        # Try to download reconstruction.json for camera reprojection
+        # This enables precise pixel-to-pixel mapping and temperature extraction
+        reconstruction_data = None
+        reconstruction_path = work_dir / "reconstruction.json"
+        if s3_client.download_reconstruction_json(reconstruction_path):
+            import json
+            try:
+                with open(reconstruction_path, 'r') as f:
+                    reconstruction_data = json.load(f)
+                logger.info("Loaded reconstruction.json for camera reprojection")
+            except Exception as e:
+                logger.warning(f"Failed to parse reconstruction.json: {e}")
+                reconstruction_data = None
+
+        gps_matcher = GPSMatcher(
+            s3_client=s3_client,
+            geo_converter=geo_converter,
+            reconstruction_data=reconstruction_data,
+            enable_temperature=True,
+        )
+        matched_count, defect_matches = gps_matcher.match_images_to_panels(
             panel_grid=panel_grid, temp_dir=raw_images_dir, output_dir=images_dir
         )
         logger.info(f"Matched {matched_count} raw images")
@@ -182,6 +219,7 @@ def main() -> int:
             config=report_config,
             odm_stats=odm_stats,
             odm_stats_dir=odm_stats_dir,
+            defect_matches=defect_matches,
         )
 
         tex_path = work_dir / "report.tex"
@@ -192,8 +230,23 @@ def main() -> int:
         logger.info("STEP 9: Exporting metrics")
         logger.info("=" * 80)
 
-        metrics_json_path = export_metrics_json(panel_grid, work_dir / "metrics.json")
+        metrics_json_path = export_metrics_json(
+            panel_grid,
+            work_dir / "metrics.json",
+            ortho_width=img_w,
+            ortho_height=img_h,
+            ortho_scale_factor=settings.orthophoto_downscale_factor,
+        )
         metrics_csv_path = export_metrics_csv(panel_grid, work_dir / "metrics.csv")
+
+        # Export panel_grid.json for interactive defect map (with report-aligned panel IDs)
+        panel_grid_json_path = export_panel_grid_json(
+            panel_grid,
+            work_dir / "panel_grid.json",
+            ortho_width=img_w,
+            ortho_height=img_h,
+            ortho_scale_factor=settings.orthophoto_downscale_factor,
+        )
 
         # ===== STEP 10: Compile LaTeX to PDF =====
         logger.info("=" * 80)
@@ -286,6 +339,22 @@ def main() -> int:
         metrics_json_s3 = s3_client.upload_report(metrics_json_path, "metrics.json")
         metrics_csv_s3 = s3_client.upload_report(metrics_csv_path, "metrics.csv")
 
+        # Upload panel_grid.json for interactive defect map
+        panel_grid_s3 = s3_client.upload_report(panel_grid_json_path, "panel_grid.json")
+        logger.info(f"Uploaded panel_grid.json for defect map: {panel_grid_s3}")
+
+        # Upload ortho.png for interactive defect map
+        ortho_png_path = images_dir / "ortho.png"
+        if ortho_png_path.exists():
+            ortho_png_s3 = s3_client.upload_report(ortho_png_path, "ortho.png")
+            logger.info(f"Uploaded ortho.png for defect map: {ortho_png_s3}")
+
+        # Upload DXF layers file (if generated)
+        dxf_s3 = None
+        if dxf_path and dxf_path.exists():
+            dxf_s3 = s3_client.upload_report(dxf_path, "layers.dxf")
+            logger.info(f"Uploaded DXF layers: {dxf_s3}")
+
         # ===== Success! =====
         duration = time.time() - start_time
         logger.info("=" * 80)
@@ -300,6 +369,7 @@ def main() -> int:
             report_lowres_pdf_s3=pdf_lowres_s3,
             metrics_json_s3=metrics_json_s3,
             metrics_csv_s3=metrics_csv_s3,
+            layers_dxf_s3=dxf_s3,
             total_panels=len(panel_grid),
             panels_with_defects=panels_with_defects,
             total_defects=total_defects,
