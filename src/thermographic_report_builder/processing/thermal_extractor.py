@@ -86,8 +86,8 @@ class ThermalExtractor:
 
         Args:
             image_path: Path to DJI thermal R-JPEG image
-            pixel_x: X coordinate of defect in image
-            pixel_y: Y coordinate of defect in image
+            pixel_x: X coordinate of defect in VISUAL image (1280x1024)
+            pixel_y: Y coordinate of defect in VISUAL image (1280x1024)
             panel_region: Optional (x1, y1, x2, y2) bounding box for panel.
                          If None, uses a region around the defect.
             sample_radius: Radius around defect to exclude when calculating
@@ -110,9 +110,17 @@ class ThermalExtractor:
 
             height, width = temp_array.shape
 
-            # Clamp pixel coordinates to image bounds
-            pixel_x = max(0, min(int(pixel_x), width - 1))
-            pixel_y = max(0, min(int(pixel_y), height - 1))
+            # IMPORTANT: Thermal array is 640x512, visual image is 1280x1024
+            # Scale coordinates from visual (1280x1024) to thermal (640x512) resolution
+            scale_x = width / 1280.0   # 640/1280 = 0.5
+            scale_y = height / 1024.0  # 512/1024 = 0.5
+
+            # Scale and clamp pixel coordinates to thermal array bounds
+            pixel_x = int(max(0, min(width - 1, int(pixel_x) * scale_x)))
+            pixel_y = int(max(0, min(height - 1, int(pixel_y) * scale_y)))
+
+            # Also scale the sample radius for the thermal resolution
+            sample_radius = int(sample_radius * scale_x)
 
             # Get temperature at defect location
             defect_temp = float(temp_array[pixel_y, pixel_x])
@@ -192,13 +200,13 @@ class ThermalExtractor:
 
         Args:
             image_path: Path to DJI thermal R-JPEG image
-            initial_x: Initial X coordinate (from projection)
-            initial_y: Initial Y coordinate (from projection)
-            search_radius: Radius to search around initial point (pixels)
+            initial_x: Initial X coordinate in VISUAL image (1280x1024)
+            initial_y: Initial Y coordinate in VISUAL image (1280x1024)
+            search_radius: Radius to search around initial point (in visual pixels)
 
         Returns:
-            Tuple of (hotspot_x, hotspot_y, temperature) or (initial_x, initial_y, temp)
-            if search fails
+            Tuple of (hotspot_x, hotspot_y, temperature) in VISUAL coordinates,
+            or (initial_x, initial_y, temp) if search fails
         """
         if not self.available:
             return initial_x, initial_y, 0.0
@@ -210,35 +218,49 @@ class ThermalExtractor:
 
             height, width = temp_array.shape
 
-            # Define search region
-            x1 = max(0, initial_x - search_radius)
-            y1 = max(0, initial_y - search_radius)
-            x2 = min(width, initial_x + search_radius)
-            y2 = min(height, initial_y + search_radius)
+            # IMPORTANT: Thermal array is 640x512, visual image is 1280x1024
+            # Scale coordinates from visual to thermal resolution
+            scale_x = width / 1280.0   # 640/1280 = 0.5
+            scale_y = height / 1024.0  # 512/1024 = 0.5
+
+            # Convert initial coordinates to thermal resolution
+            thermal_x = int(initial_x * scale_x)
+            thermal_y = int(initial_y * scale_y)
+            thermal_radius = int(search_radius * scale_x)
+
+            # Define search region in thermal coordinates
+            x1 = max(0, thermal_x - thermal_radius)
+            y1 = max(0, thermal_y - thermal_radius)
+            x2 = min(width, thermal_x + thermal_radius)
+            y2 = min(height, thermal_y + thermal_radius)
 
             # Extract search region
             search_region = temp_array[y1:y2, x1:x2]
 
-            # Find maximum temperature location
+            # Find maximum temperature location (in thermal coordinates)
             local_max_idx = np.unravel_index(np.argmax(search_region), search_region.shape)
-            hotspot_y = y1 + local_max_idx[0]
-            hotspot_x = x1 + local_max_idx[1]
+            thermal_hotspot_y = y1 + local_max_idx[0]
+            thermal_hotspot_x = x1 + local_max_idx[1]
             max_temp = float(search_region[local_max_idx])
 
             # Get temperature at initial point for comparison
             initial_temp = float(temp_array[
-                max(0, min(height - 1, initial_y)),
-                max(0, min(width - 1, initial_x))
+                max(0, min(height - 1, thermal_y)),
+                max(0, min(width - 1, thermal_x))
             ])
+
+            # Convert hotspot coordinates back to visual resolution
+            visual_hotspot_x = int(thermal_hotspot_x / scale_x)
+            visual_hotspot_y = int(thermal_hotspot_y / scale_y)
 
             # Only use the hotspot if it's significantly warmer than initial point
             # This avoids jumping to a different hotspot in the same image
             if max_temp > initial_temp + 2.0:  # At least 2°C warmer
                 logger.info(
-                    f"Hotspot search: adjusted ({initial_x}, {initial_y}) -> ({hotspot_x}, {hotspot_y}), "
+                    f"Hotspot search: adjusted ({initial_x}, {initial_y}) -> ({visual_hotspot_x}, {visual_hotspot_y}), "
                     f"temp {initial_temp:.1f}°C -> {max_temp:.1f}°C (+{max_temp - initial_temp:.1f}°C)"
                 )
-                return hotspot_x, hotspot_y, max_temp
+                return visual_hotspot_x, visual_hotspot_y, max_temp
             else:
                 logger.debug(
                     f"Hotspot search: keeping initial ({initial_x}, {initial_y}), "

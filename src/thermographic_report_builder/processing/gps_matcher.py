@@ -301,9 +301,13 @@ class GPSMatcher:
                         if temp_array is None:
                             continue
 
+                        # IMPORTANT: Thermal array is 640x512, visual image is 1280x1024
+                        # Scale coordinates from visual to thermal resolution
                         h, w = temp_array.shape
-                        px = int(max(0, min(w - 1, match.pixel_x)))
-                        py = int(max(0, min(h - 1, match.pixel_y)))
+                        scale_x = w / 1280.0  # 640/1280 = 0.5
+                        scale_y = h / 1024.0  # 512/1024 = 0.5
+                        px = int(max(0, min(w - 1, match.pixel_x * scale_x)))
+                        py = int(max(0, min(h - 1, match.pixel_y * scale_y)))
 
                         temp_at_point = temp_array[py, px]
                         mean_temp = temp_array.mean()
