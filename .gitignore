@@ -1,0 +1,24 @@
+# Python env and caches
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Coverage and test output
+htmlcov/
+.coverage*
+
+# Build / temp artifacts
+dist/
+build/
+/latex-compiler/build/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local env
+.env
