@@ -10,6 +10,7 @@ from pylatex.utils import NoEscape, bold, escape_latex
 
 from ..models.defect import Panel
 from ..models.report import ReportConfig
+from ..models.annotation_manifest import AnnotationManifest
 from ..config import constants
 from ..utils.logger import get_logger
 from ..utils.exceptions import ReportGenerationError
@@ -29,6 +30,7 @@ class ReportBuilder:
         odm_stats: dict = None,
         odm_stats_dir: Path = None,
         defect_matches: Optional[Dict[str, DefectMatch]] = None,
+        annotation_manifest: Optional[AnnotationManifest] = None,
     ):
         """
         Initialize report builder.
@@ -40,6 +42,7 @@ class ReportBuilder:
             odm_stats: ODM statistics dictionary (optional)
             odm_stats_dir: Directory containing ODM stats images (optional)
             defect_matches: Dictionary of defect matches with temperature data (optional)
+            annotation_manifest: Annotation manifest with temperature data for thermal images
         """
         self.panel_grid = panel_grid
         self.images_dir = images_dir
@@ -47,6 +50,7 @@ class ReportBuilder:
         self.odm_stats = odm_stats
         self.odm_stats_dir = odm_stats_dir
         self.defect_matches = defect_matches or {}
+        self.annotation_manifest = annotation_manifest
 
         # Count defects
         self.panels_with_defects = [p for p in panel_grid.values() if p.has_defects]
@@ -189,6 +193,8 @@ class ReportBuilder:
         doc.packages.append(pl.Package("calc"))
         doc.packages.append(pl.Package("tikz"))
         doc.packages.append(pl.Package("xcolor"))
+        doc.packages.append(pl.Package("colortbl"))  # For colored table cells
+        doc.packages.append(pl.Package("array"))  # For column styling
         doc.preamble.append(NoEscape(r"\usetikzlibrary{calc}"))
 
         # Geometry
@@ -540,31 +546,113 @@ RoyalBlue]
         doc.append(NoEscape(r"\FloatBarrier"))
         doc.append(NoEscape(r"\vspace{0.5cm}"))  # Add spacing to prevent legend overlap
 
-        # Add annotated thermal image with temperature data if available
-        if annotated_img_path.exists():
+        # Add annotated thermal image(s) with temperature data if available
+        # Check for multiple defect images first (defeitoN_annotated.jpg pattern)
+        # then fall back to single annotated image
+        annotated_images_found = []
+
+        # Check for indexed defect images (defeito1, defeito2, etc.)
+        for i in range(1, 20):  # Support up to 20 defects per panel
+            indexed_img_path = self.images_dir / f"{defect_type_no_underscore}_({panel.panel_id})_defeito{i}_annotated.jpg"
+            indexed_img_rel = f"report_images/{defect_type_no_underscore}_({panel.panel_id})_defeito{i}_annotated.jpg"
+            if indexed_img_path.exists():
+                annotated_images_found.append((indexed_img_path, indexed_img_rel, i))
+            else:
+                break  # Stop when we don't find the next index
+
+        # If no indexed images found, check for single annotated image
+        if not annotated_images_found and annotated_img_path.exists():
+            annotated_images_found.append((annotated_img_path, annotated_img, None))
+
+        # Add all found annotated images with temperature legend tables
+        for img_path, img_rel, defect_num in annotated_images_found:
             doc.append(NoEscape(r"\vspace{0.3cm}"))
             with doc.create(pl.Figure(position="h!")) as fig:
-                fig.add_image(annotated_img, width=NoEscape(r"0.65\textwidth"))
-                fig.add_caption(f"Análise Termográfica - Painel {panel.panel_id}")
+                fig.add_image(img_rel, width=NoEscape(r"0.65\textwidth"))
+                if defect_num is not None:
+                    fig.add_caption(f"Análise Termográfica - Painel {panel.panel_id} (Defeito {defect_num})")
+                else:
+                    fig.add_caption(f"Análise Termográfica - Painel {panel.panel_id}")
             doc.append(NoEscape(r"\FloatBarrier"))
+
+            # Add temperature legend table from annotation manifest
+            self._add_thermal_legend_table(doc, panel.panel_id, defect_type_no_underscore, defect_num)
 
         # Add descriptive text
         panel_text = text_template.format(panel_id=panel.panel_id)
         doc.append(panel_text + "\n\n")
 
-        # Add temperature data if available (as text backup when image not present)
-        match_key = f"{defect_type}_{panel.panel_id}"
-        match = self.defect_matches.get(match_key)
-        if match and match.temperature and not annotated_img_path.exists():
-            # Only show text if we don't have the annotated image
-            temp = match.temperature
-            doc.append(NoEscape(r"\noindent\textbf{Dados de Temperatura:}\\"))
-            doc.append(NoEscape(r"\begin{itemize}"))
-            doc.append(NoEscape(f"\\item Temperatura do Defeito: {temp.defect_temp_celsius:.1f}°C"))
-            doc.append(NoEscape(f"\\item Temperatura Média do Painel: {temp.panel_avg_celsius:.1f}°C"))
-            doc.append(NoEscape(f"\\item $\\Delta$T (Diferença): {temp.delta_t:.1f}°C"))
-            doc.append(NoEscape(f"\\item Classificação: \\textbf{{{temp.severity}}}"))
-            doc.append(NoEscape(r"\end{itemize}"))
+    def _add_thermal_legend_table(
+        self,
+        doc: pl.Document,
+        panel_id: str,
+        defect_type: str,
+        defect_num: Optional[int],
+    ) -> None:
+        """
+        Add a beautiful LaTeX legend table with temperature data below thermal image.
+
+        Args:
+            doc: LaTeX document
+            panel_id: Panel identifier (e.g., "A-01")
+            defect_type: Defect type without underscores (e.g., "hotspots")
+            defect_num: Defect number (1-based) or None for single defect
+        """
+        if not self.annotation_manifest:
+            return
+
+        # Find matching annotation entry
+        if defect_num is not None:
+            defect_id = f"{defect_type}_({panel_id})_defeito{defect_num}"
+        else:
+            defect_id = f"{defect_type}_({panel_id})_defeito1"
+
+        entry = None
+        for ann in self.annotation_manifest.annotations:
+            if ann.defect_id == defect_id:
+                entry = ann
+                break
+
+        if not entry:
+            logger.debug(f"No annotation entry found for {defect_id}")
+            return
+
+        # Severity color mapping for LaTeX
+        severity_colors = {
+            "CRITICAL": "red",
+            "HIGH": "orange",
+            "MEDIUM": "yellow",
+            "LOW": "green!60!black",
+            "MINIMAL": "green",
+        }
+        severity_color = severity_colors.get(entry.severity, "black")
+
+        # Severity text in Portuguese
+        severity_text_pt = {
+            "CRITICAL": "Crítico",
+            "HIGH": "Alto",
+            "MEDIUM": "Médio",
+            "LOW": "Baixo",
+            "MINIMAL": "Mínimo",
+        }
+        severity_pt = severity_text_pt.get(entry.severity, entry.severity)
+
+        # Create academic-style legend table (matching Table 1 format)
+        doc.append(NoEscape(r"\vspace{0.2cm}"))
+        doc.append(NoEscape(r"\begin{center}"))
+        doc.append(NoEscape(r"\small"))
+        doc.append(NoEscape(r"\begin{tabular}{lc}"))
+        doc.append(NoEscape(r"\toprule"))
+        doc.append(NoEscape(r"\textbf{Parâmetro} & \textbf{Valor} \\"))
+        doc.append(NoEscape(r"\midrule"))
+        doc.append(NoEscape(f"Ponto Quente & {entry.hot_point.temp:.1f}°C \\\\"))
+        doc.append(NoEscape(f"Referência & {entry.cold_point.temp:.1f}°C \\\\"))
+        doc.append(NoEscape(f"$\\Delta$T (Diferença) & {entry.delta_t:.1f}°C \\\\"))
+        doc.append(NoEscape(f"Classificação & \\textcolor{{{severity_color}}}{{\\textbf{{{severity_pt}}}}} \\\\"))
+        doc.append(NoEscape(r"\bottomrule"))
+        doc.append(NoEscape(r"\end{tabular}"))
+        doc.append(NoEscape(r"\end{center}"))
+        doc.append(NoEscape(r"\vspace{0.3cm}"))
 
     def _add_defect_details(self, doc: pl.Document) -> None:
         """Add detailed section for each panel with defects."""
@@ -791,8 +879,10 @@ RoyalBlue]
             dest_path = self.images_dir / filename
             shutil.copy(image_path, dest_path)
 
+            # Use smaller width for overlap image to fit page
+            img_width = r"0.6\textwidth" if filename == "overlap.png" else r"0.8\textwidth"
             with doc.create(pl.Figure(position="h!")) as fig:
-                fig.add_image(f"report_images/{filename}", width=NoEscape(r"0.8\textwidth"))
+                fig.add_image(f"report_images/{filename}", width=NoEscape(img_width))
                 fig.add_caption(caption)
         else:
             logger.warning(f"ODM image not found: {filename}")

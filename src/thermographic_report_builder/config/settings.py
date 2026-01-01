@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     uploads_bucket: str = f"solar-uploads-{get_bucket_suffix()}"
     reports_bucket: str = f"solar-reports-{get_bucket_suffix()}"
     groundtruth_bucket: str = f"solar-groundtruth-{get_bucket_suffix()}"
+    intermediate_bucket: str = f"solar-intermediate-{get_bucket_suffix()}"
 
     # ===== Job Parameters (from AWS Batch environment) =====
     project_id: str
@@ -58,6 +59,24 @@ class Settings(BaseSettings):
     pdf_quality: int = 90
     jpeg_quality: int = 70
     generate_lowres_pdf: bool = True
+
+    # ===== Thermal Calibration Parameters =====
+    # These parameters affect temperature accuracy in thermal analysis
+    # See DJI Thermal SDK documentation for details
+    thermal_emissivity: float = 0.60  # Effective emissivity for solar panels
+    thermal_object_distance: float = 25.0  # Default flight altitude in meters (1-25m range)
+    thermal_relative_humidity: float = 50.0  # Relative humidity % (20-100%)
+    thermal_reflected_temp: float = 20.0  # Reflected apparent temperature in Celsius
+    thermal_auto_altitude: bool = True  # Extract altitude from EXIF if available
+
+    # ===== Thermal-Visual Alignment Parameters =====
+    # The DJI M30T R-JPEG embeds a visual channel (1280x1024) that is pre-aligned with
+    # the thermal data (640x512). However, there can be residual misalignment due to
+    # manufacturing tolerances or temperature drift. These offsets correct for that.
+    # Units are in VISUAL pixels (1280x1024 space), applied BEFORE scaling to thermal.
+    # Positive X = shift thermal lookup RIGHT, Positive Y = shift thermal lookup DOWN.
+    thermal_visual_offset_x: float = 0.0  # Horizontal offset (visual pixels)
+    thermal_visual_offset_y: float = 0.0  # Vertical offset (visual pixels)
 
     # ===== Logging =====
     log_level: str = "INFO"

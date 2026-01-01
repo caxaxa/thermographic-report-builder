@@ -13,6 +13,7 @@ from .models.report import ReportConfig
 from .models.job import JobOutput
 from .utils import setup_logging, get_logger, PixelToLatLonConverter
 from .utils.exceptions import ProcessingError
+from .utils.thermal_alignment import log_alignment_config
 
 logger = get_logger(__name__)
 
@@ -29,6 +30,7 @@ def main() -> int:
     logger.info("=" * 80)
     logger.info(f"Starting Thermographic Report Builder v0.1.0")
     logger.info(f"Project: {settings.project_id}, User: {settings.user_id}")
+    log_alignment_config()
     logger.info("=" * 80)
 
     start_time = time.time()
@@ -165,16 +167,56 @@ def main() -> int:
                 logger.warning(f"Failed to parse reconstruction.json: {e}")
                 reconstruction_data = None
 
+        # Try to download DSM for precise elevation
+        # Using DSM elevation instead of estimated ground level significantly
+        # improves projection accuracy - it's the same elevation ODM used
+        dsm_path = work_dir / "dsm.tif"
+        if not s3_client.download_dsm(dsm_path):
+            dsm_path = None
+
         gps_matcher = GPSMatcher(
             s3_client=s3_client,
             geo_converter=geo_converter,
             reconstruction_data=reconstruction_data,
+            dsm_path=dsm_path,
             enable_temperature=True,
         )
         matched_count, defect_matches = gps_matcher.match_images_to_panels(
             panel_grid=panel_grid, temp_dir=raw_images_dir, output_dir=images_dir
         )
         logger.info(f"Matched {matched_count} raw images")
+
+        # ===== STEP 7.1: Export annotation manifest =====
+        logger.info("=" * 80)
+        logger.info("STEP 7.1: Exporting annotation manifest")
+        logger.info("=" * 80)
+
+        manifest = gps_matcher.export_annotation_manifest()
+        manifest_path = work_dir / "annotation_manifest.json"
+        manifest.save(manifest_path)
+        logger.info(f"Exported {len(manifest.annotations)} annotations to manifest")
+
+        # ===== STEP 7.2: Check for and apply annotation overrides =====
+        logger.info("=" * 80)
+        logger.info("STEP 7.2: Checking for annotation overrides")
+        logger.info("=" * 80)
+
+        from .models.annotation_manifest import OverrideManifest
+        override_path = work_dir / "annotation_overrides.json"
+        if s3_client.download_annotation_overrides(override_path):
+            try:
+                overrides = OverrideManifest.load(override_path)
+                logger.info(f"Found {len(overrides.overrides)} overrides, re-rendering...")
+                re_rendered = gps_matcher.apply_overrides(
+                    overrides=overrides,
+                    raw_images_dir=raw_images_dir,
+                    output_dir=images_dir,
+                )
+                logger.info(f"Re-rendered {re_rendered} annotations with overrides")
+            except Exception as e:
+                logger.warning(f"Failed to apply annotation overrides: {e}")
+        else:
+            logger.info("No annotation overrides found, using automatic annotations")
 
         # ===== STEP 7.5: Download ODM statistics (optional) =====
         logger.info("=" * 80)
@@ -220,6 +262,7 @@ def main() -> int:
             odm_stats=odm_stats,
             odm_stats_dir=odm_stats_dir,
             defect_matches=defect_matches,
+            annotation_manifest=manifest,
         )
 
         tex_path = work_dir / "report.tex"
@@ -354,6 +397,11 @@ def main() -> int:
         if dxf_path and dxf_path.exists():
             dxf_s3 = s3_client.upload_report(dxf_path, "layers.dxf")
             logger.info(f"Uploaded DXF layers: {dxf_s3}")
+
+        # Upload annotation manifest for human-in-the-loop review
+        if manifest_path.exists():
+            manifest_s3 = s3_client.upload_report(manifest_path, "annotation_manifest.json")
+            logger.info(f"Uploaded annotation manifest: {manifest_s3}")
 
         # ===== Success! =====
         duration = time.time() - start_time

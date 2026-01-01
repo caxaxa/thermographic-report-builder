@@ -324,6 +324,43 @@ class S3Client:
                 logger.warning(f"Failed to download reconstruction.json: {e}")
                 return None
 
+    def download_dsm(self, local_path: Path) -> Path | None:
+        """
+        Download Digital Surface Model (DSM) from S3.
+
+        The DSM contains elevation data for each orthophoto pixel, enabling
+        precise back-projection from orthophoto coordinates to raw image pixels.
+        Using the actual DSM elevation instead of estimated ground level
+        significantly improves projection accuracy.
+
+        Args:
+            local_path: Local path to save the DSM file
+
+        Returns:
+            Path to downloaded file, or None if not available
+
+        Note:
+            The DSM is stored in the intermediate bucket as odm/dsm.tif
+        """
+        key = f"{settings.user_id}/projects/{settings.project_id}/odm/dsm.tif"
+        bucket = settings.intermediate_bucket
+
+        logger.info(f"Attempting to download DSM from s3://{bucket}/{key}")
+
+        try:
+            self.s3.download_file(Bucket=bucket, Key=key, Filename=str(local_path))
+            size_mb = local_path.stat().st_size / 1_000_000
+            logger.info(f"Downloaded DSM: {size_mb:.2f} MB (precise elevation enabled)")
+            return local_path
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchKey', '404'):
+                logger.info("DSM not found - will use estimated ground elevation")
+                return None
+            else:
+                logger.warning(f"Failed to download DSM: {e}")
+                return None
+
     def download_odm_stats(self, output_dir: Path) -> Path:
         """
         Download ODM statistics and visualizations from S3.
@@ -385,3 +422,36 @@ class S3Client:
             error_msg = f"Failed to download ODM stats from s3://{bucket}/{prefix}: {e}"
             logger.error(error_msg)
             raise S3DownloadError(error_msg) from e
+
+    def download_annotation_overrides(self, local_path: Path) -> bool:
+        """
+        Download annotation_overrides.json if it exists.
+
+        This file is created by the frontend when a user manually corrects
+        thermal annotation positions. If present, the report builder will
+        use these override coordinates instead of automatic detection.
+
+        Args:
+            local_path: Local path to save the overrides file
+
+        Returns:
+            True if overrides were found and downloaded, False otherwise
+        """
+        key = f"{settings.user_id}/projects/{settings.project_id}/annotation_overrides.json"
+        bucket = settings.reports_bucket
+
+        logger.info(f"Checking for annotation overrides at s3://{bucket}/{key}")
+
+        try:
+            self.s3.download_file(Bucket=bucket, Key=key, Filename=str(local_path))
+            size_bytes = local_path.stat().st_size
+            logger.info(f"Downloaded annotation overrides: {size_bytes} bytes")
+            return True
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchKey', '404'):
+                logger.info("No annotation overrides found - using automatic annotations")
+                return False
+            else:
+                logger.warning(f"Failed to download annotation overrides: {e}")
+                return False

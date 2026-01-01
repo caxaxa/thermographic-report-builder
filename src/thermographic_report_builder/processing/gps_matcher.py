@@ -12,10 +12,17 @@ Supports two matching strategies:
 import cv2
 import numpy as np
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from ..models.defect import Panel
+from ..models.annotation_manifest import (
+    AnnotationPoint,
+    AnnotationEntry,
+    AnnotationManifest,
+    OverrideManifest,
+)
 from ..io.s3_client import S3Client
 from ..io.image_loader import load_raw_image_with_exif, save_image
 from ..config import settings
@@ -52,6 +59,7 @@ class GPSMatcher:
         s3_client: S3Client,
         geo_converter: PixelToLatLonConverter,
         reconstruction_data: Optional[dict] = None,
+        dsm_path: Optional[Path] = None,
         enable_temperature: bool = True,
     ):
         """
@@ -62,17 +70,21 @@ class GPSMatcher:
             geo_converter: Helper to convert pixels into geodetic coordinates
             reconstruction_data: Optional OpenSfM reconstruction.json data.
                                 If provided, enables precise camera reprojection.
+            dsm_path: Optional path to DSM (Digital Surface Model) for precise elevation.
+                     Using DSM significantly improves projection accuracy.
             enable_temperature: If True, extract temperature data when reprojection available
         """
         self.s3_client = s3_client
         self.geo_converter = geo_converter
         self.image_cache: Dict[str, dict] = {}  # Cache GPS data to avoid re-reading
         self.orientation_map: Dict[str, FlightDirection] = {}  # filename -> flight direction
+        self.annotation_entries: List[AnnotationEntry] = []  # Collect annotations for manifest
 
         # Initialize camera projector if reconstruction data available
         self.camera_projector = CameraProjector(
             reconstruction_json=reconstruction_data,
             geo_converter=geo_converter,
+            dsm_path=dsm_path,
         )
 
         # Initialize thermal extractor and annotator if enabled
@@ -129,90 +141,127 @@ class GPSMatcher:
             if not panel.has_defects:
                 continue
 
+            # Track if we've saved the main panel image (context, location, drone)
+            panel_image_saved = False
+
             # Process each defect type separately
             for defect_type in ["hotspots", "faulty_diodes", "offline_panels"]:
                 defects = getattr(panel, defect_type, [])
 
-                for defect in defects:
+                # Only create thermal analysis for hotspots (not faulty_diodes or offline_panels)
+                create_thermal_analysis = defect_type == "hotspots"
+
+                # Process ALL defects
+                for defect_idx, defect in enumerate(defects):
                     defect_center_px = defect.bbox.center
-
-                    # STEP 1: Use legacy GPS matching to find closest image (proven to work)
                     defect_lon, defect_lat = self.geo_converter.pixel_to_lonlat(defect_center_px)
-                    closest_image = self._find_closest_image(defect_lat, defect_lon)
 
-                    if not closest_image:
-                        logger.warning(f"No matching image found for {panel.panel_id}")
-                        continue
+                    # STEP 1: For HOTSPOTS, use temperature-scored matching to find best image
+                    # For other defect types, use GPS-only matching
+                    match = None
 
-                    image_path = Path(closest_image["path"])
-                    image_name = image_path.name
-
-                    # STEP 2: Use camera reprojection to get pixel coordinates for annotation
-                    pixel_x, pixel_y = None, None
-                    if self.camera_projector.available:
-                        projection = self.camera_projector.project_to_specific_image(
+                    if create_thermal_analysis and self.thermal_extractor and self.thermal_extractor.available:
+                        # Use temperature-based scoring to find image with actual hotspot
+                        match = self._find_best_match(
                             ortho_x=defect_center_px[0],
                             ortho_y=defect_center_px[1],
-                            image_name=image_name,
+                            temp_dir=temp_dir,
                         )
-                        if projection:
-                            pixel_x, pixel_y = projection
+                        if match:
+                            logger.info(
+                                f"Temperature-scored match for {panel.panel_id} defect {defect_idx}: "
+                                f"{match.image_name} via {match.method}"
+                            )
 
-                    # Create match object
-                    match = DefectMatch(
-                        image_name=image_name,
-                        image_path=image_path,
-                        method="gps" if pixel_x is None else "reprojection",
-                        pixel_x=pixel_x,
-                        pixel_y=pixel_y,
-                    )
+                    # Fallback to GPS matching if temperature scoring didn't work
+                    if not match:
+                        closest_image = self._find_closest_image(defect_lat, defect_lon)
+                        if not closest_image:
+                            logger.warning(f"No matching image found for {panel.panel_id} defect {defect_idx}")
+                            continue
+
+                        image_path = Path(closest_image["path"])
+                        image_name = image_path.name
+
+                        # Try camera reprojection to get pixel coordinates
+                        pixel_x, pixel_y = None, None
+                        if self.camera_projector.available:
+                            projection = self.camera_projector.project_to_specific_image(
+                                ortho_x=defect_center_px[0],
+                                ortho_y=defect_center_px[1],
+                                image_name=image_name,
+                            )
+                            if projection:
+                                pixel_x, pixel_y = projection
+
+                        match = DefectMatch(
+                            image_name=image_name,
+                            image_path=image_path,
+                            method="gps" if pixel_x is None else "reprojection",
+                            pixel_x=pixel_x,
+                            pixel_y=pixel_y,
+                        )
 
                     if match:
-                        # Use defect type string format for filename (without underscore)
-                        defect_type_str = defect_type.replace("_", "")
-                        filename = f"{defect_type_str}_({panel.panel_id}).jpg"
-                        output_path = output_dir / filename
-
-                        # Load image
-                        img, _ = load_raw_image_with_exif(match.image_path)
-
                         # Get the source filename to check orientation
                         src_filename = match.image_name
                         flight_dir = self.orientation_map.get(src_filename)
 
                         # Store original (unrotated) pixel coordinates for raw file operations
-                        # Temperature extraction and annotation need the ORIGINAL coordinates
-                        # because they read directly from the unrotated raw R-JPEG file
                         original_pixel_x = match.pixel_x
                         original_pixel_y = match.pixel_y
 
-                        # Log coordinate tracing for debugging hotspot location
-                        logger.info(
-                            f"Projecting {panel.panel_id}: ortho=({defect_center_px[0]:.1f}, {defect_center_px[1]:.1f}) "
-                            f"-> raw=({original_pixel_x:.1f}, {original_pixel_y:.1f}) in {match.image_name}"
-                        )
+                        # Log coordinate tracing for debugging
+                        if original_pixel_x is not None:
+                            logger.info(
+                                f"Projecting {panel.panel_id} defect {defect_idx}: "
+                                f"ortho=({defect_center_px[0]:.1f}, {defect_center_px[1]:.1f}) "
+                                f"-> raw=({original_pixel_x:.1f}, {original_pixel_y:.1f}) in {match.image_name}"
+                            )
 
-                        # Rotate 180° if flying south (to orient image north-up)
-                        if flight_dir == "south":
-                            img = cv2.rotate(img, cv2.ROTATE_180)
-                            # Also rotate the pixel coordinates for display
-                            if match.pixel_x is not None and match.pixel_y is not None:
-                                img_h, img_w = img.shape[:2]
-                                match.pixel_x = img_w - match.pixel_x
-                                match.pixel_y = img_h - match.pixel_y
-                            logger.debug(f"Rotated {src_filename} 180° (flying south)")
+                        # Save the main panel image ONCE per panel (for context, location, drone images)
+                        if not panel_image_saved:
+                            # Load image
+                            img, _ = load_raw_image_with_exif(match.image_path)
 
-                        # Extract temperature if we have precise pixel coordinates
-                        # NOTE: Use ORIGINAL coordinates since we read from the unrotated raw file
+                            # Rotate 180° if flying south
+                            if flight_dir == "south":
+                                img = cv2.rotate(img, cv2.ROTATE_180)
+                                logger.debug(f"Rotated {src_filename} 180° (flying south)")
+
+                            # Resize to half size for the main drone image
+                            img_resized = cv2.resize(img, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+
+                            # Use defect type string format for filename
+                            defect_type_str = defect_type.replace("_", "")
+                            filename = f"{defect_type_str}_({panel.panel_id}).jpg"
+                            output_path = output_dir / filename
+                            save_image(img_resized, output_path, quality=settings.jpeg_quality)
+
+                            panel_image_saved = True
+                            matched_count += 1
+
+                            # Store match info for the panel
+                            match_key = f"{defect_type}_{panel.panel_id}"
+                            defect_matches[match_key] = match
+
+                        # Create thermal analysis image for HOTSPOTS ONLY
+                        # Even if reprojection fails, try with image center as fallback
                         if (
-                            original_pixel_x is not None
-                            and original_pixel_y is not None
+                            create_thermal_analysis
                             and self.thermal_extractor
                             and self.thermal_extractor.available
                         ):
-                            # We've already selected the raw image with the highest temperature
-                            # at the projected point (in _find_best_match), so no need to search
-                            # for a local hotspot - the projection should be accurate
+                            # Fallback pixel coordinates if projection failed
+                            # Use image center (640, 512) - panel is likely visible there
+                            if original_pixel_x is None or original_pixel_y is None:
+                                original_pixel_x = 640.0  # Center of 1280
+                                original_pixel_y = 512.0  # Center of 1024
+                                logger.warning(
+                                    f"Reprojection failed for {panel.panel_id} defect {defect_idx}, "
+                                    f"using image center as fallback"
+                                )
+                            # Extract temperature data
                             match.temperature = self.thermal_extractor.extract_temperature_at_pixel(
                                 image_path=match.image_path,
                                 pixel_x=int(original_pixel_x),
@@ -220,51 +269,160 @@ class GPSMatcher:
                             )
                             if match.temperature:
                                 logger.info(
-                                    f"Temperature at {panel.panel_id}: "
+                                    f"Temperature at {panel.panel_id} defect {defect_idx}: "
                                     f"defect={match.temperature.defect_temp_celsius}°C, "
                                     f"panel_avg={match.temperature.panel_avg_celsius}°C, "
                                     f"ΔT={match.temperature.delta_t}°C ({match.temperature.severity})"
                                 )
 
-                                # Create annotated thermal image with temperature overlay
-                                # NOTE: Use ORIGINAL coordinates since annotator reads from unrotated raw file
-                                if self.thermal_annotator:
-                                    # Get geospatial coordinates for the defect
-                                    defect_lon, defect_lat = self.geo_converter.pixel_to_lonlat(
-                                        (defect_center_px[0], defect_center_px[1])
-                                    )
+                            # Create annotated thermal image for THIS hotspot
+                            if self.thermal_annotator:
+                                # Project panel bbox corners to raw image coordinates
+                                panel_bbox_visual = None
+                                if self.camera_projector.available:
+                                    # Get panel corners in orthophoto coordinates
+                                    ortho_left = panel.bbox.left
+                                    ortho_top = panel.bbox.top
+                                    ortho_right = panel.bbox.right
+                                    ortho_bottom = panel.bbox.bottom
 
-                                    annotated = self.thermal_annotator.create_annotated_image(
-                                        raw_image_path=match.image_path,
-                                        defect_pixel_x=original_pixel_x,
-                                        defect_pixel_y=original_pixel_y,
-                                        panel_id=panel.panel_id,
-                                        panel_row=panel.row,
-                                        panel_column=panel.column,
-                                        latitude=defect_lat,
-                                        longitude=defect_lon,
-                                    )
-
-                                    if annotated:
-                                        # Save annotated image
-                                        annotated_filename = f"{defect_type_str}_({panel.panel_id})_annotated.jpg"
-                                        annotated_path = output_dir / annotated_filename
-                                        self.thermal_annotator.save_annotated_image(
-                                            annotated, annotated_path
+                                    # Project all 4 corners to raw image
+                                    corners_raw = []
+                                    for ox, oy in [
+                                        (ortho_left, ortho_top),
+                                        (ortho_right, ortho_top),
+                                        (ortho_right, ortho_bottom),
+                                        (ortho_left, ortho_bottom),
+                                    ]:
+                                        proj = self.camera_projector.project_to_specific_image(
+                                            ortho_x=ox,
+                                            ortho_y=oy,
+                                            image_name=match.image_name,
                                         )
+                                        if proj:
+                                            corners_raw.append(proj)
 
-                        # Resize to half size
-                        img_resized = cv2.resize(img, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+                                    # Accept 3+ corners (some might be out of frame)
+                                    if len(corners_raw) >= 3:
+                                        xs = [c[0] for c in corners_raw]
+                                        ys = [c[1] for c in corners_raw]
+                                        # Clamp to image bounds (1280x1024)
+                                        panel_bbox_visual = (
+                                            max(0, int(min(xs))),  # left
+                                            max(0, int(min(ys))),  # top
+                                            min(1280, int(max(xs))),  # right
+                                            min(1024, int(max(ys))),  # bottom
+                                        )
+                                        logger.debug(
+                                            f"Panel {panel.panel_id} bbox in raw image: {panel_bbox_visual} "
+                                            f"(from {len(corners_raw)} corners)"
+                                        )
+                                    elif len(corners_raw) > 0:
+                                        # Even with 1-2 corners, create a bbox around the defect point
+                                        # Use projected defect point as center with padding
+                                        padding = 100  # pixels
+                                        panel_bbox_visual = (
+                                            max(0, int(original_pixel_x - padding)),
+                                            max(0, int(original_pixel_y - padding)),
+                                            min(1280, int(original_pixel_x + padding)),
+                                            min(1024, int(original_pixel_y + padding)),
+                                        )
+                                        logger.debug(
+                                            f"Panel {panel.panel_id} using defect-centered bbox: {panel_bbox_visual}"
+                                        )
+                                    else:
+                                        logger.warning(
+                                            f"Panel {panel.panel_id}: No corners projected, using defect-centered bbox"
+                                        )
+                                        padding = 100
+                                        panel_bbox_visual = (
+                                            max(0, int(original_pixel_x - padding)),
+                                            max(0, int(original_pixel_y - padding)),
+                                            min(1280, int(original_pixel_x + padding)),
+                                            min(1024, int(original_pixel_y + padding)),
+                                        )
+                                else:
+                                    # Camera projector not available - use defect-centered bbox
+                                    logger.debug(
+                                        f"Panel {panel.panel_id}: No camera projector, using defect-centered bbox"
+                                    )
+                                    padding = 100
+                                    panel_bbox_visual = (
+                                        max(0, int(original_pixel_x - padding)),
+                                        max(0, int(original_pixel_y - padding)),
+                                        min(1280, int(original_pixel_x + padding)),
+                                        min(1024, int(original_pixel_y + padding)),
+                                    )
 
-                        save_image(img_resized, output_path, quality=settings.jpeg_quality)
-                        matched_count += 1
+                                annotated = self.thermal_annotator.create_annotated_image(
+                                    raw_image_path=match.image_path,
+                                    defect_pixel_x=original_pixel_x,
+                                    defect_pixel_y=original_pixel_y,
+                                    panel_id=panel.panel_id,
+                                    panel_row=panel.row,
+                                    panel_column=panel.column,
+                                    latitude=defect_lat,
+                                    longitude=defect_lon,
+                                    defect_index=defect_idx,  # Pass defect index for labeling
+                                    panel_bbox_visual=panel_bbox_visual,  # Constrain search to panel
+                                )
 
-                        # Store match info
-                        match_key = f"{defect_type}_{panel.panel_id}"
-                        defect_matches[match_key] = match
+                                if annotated:
+                                    # Save annotated image with defect index if multiple defects
+                                    defect_type_str = defect_type.replace("_", "")
+                                    if len(defects) > 1:
+                                        # Multiple defects: include index in filename
+                                        annotated_filename = f"{defect_type_str}_({panel.panel_id})_defeito{defect_idx + 1}_annotated.jpg"
+                                    else:
+                                        # Single defect: no index needed
+                                        annotated_filename = f"{defect_type_str}_({panel.panel_id})_annotated.jpg"
+                                    annotated_path = output_dir / annotated_filename
+                                    self.thermal_annotator.save_annotated_image(
+                                        annotated, annotated_path
+                                    )
+                                    logger.info(f"Saved thermal analysis: {annotated_filename}")
 
-                        # Only save one image per panel per defect type
-                        break
+                                    # Record annotation entry for manifest
+                                    defect_id = f"{defect_type_str}_({panel.panel_id})_defeito{defect_idx + 1}"
+                                    s3_raw_path = f"s3://{settings.uploads_bucket}/{settings.user_id}/projects/{settings.project_id}/images/{match.image_name}"
+
+                                    # Convert visual coords to thermal coords for manifest
+                                    from ..utils.thermal_alignment import visual_to_thermal
+                                    hot_thermal_x, hot_thermal_y = visual_to_thermal(
+                                        annotated.hot_cold.hot_x, annotated.hot_cold.hot_y
+                                    )
+                                    cold_thermal_x, cold_thermal_y = visual_to_thermal(
+                                        annotated.hot_cold.cold_x, annotated.hot_cold.cold_y
+                                    )
+
+                                    entry = AnnotationEntry(
+                                        defect_id=defect_id,
+                                        panel_id=panel.panel_id,
+                                        defect_type=defect_type,
+                                        defect_index=defect_idx + 1,
+                                        raw_image_path=s3_raw_path,
+                                        raw_image_name=match.image_name,
+                                        annotated_image=annotated_filename,
+                                        hot_point=AnnotationPoint(
+                                            x=int(hot_thermal_x),
+                                            y=int(hot_thermal_y),
+                                            temp=annotated.hot_cold.hot_temp,
+                                        ),
+                                        cold_point=AnnotationPoint(
+                                            x=int(cold_thermal_x),
+                                            y=int(cold_thermal_y),
+                                            temp=annotated.hot_cold.cold_temp,
+                                        ),
+                                        delta_t=annotated.hot_cold.hot_temp - annotated.hot_cold.cold_temp,
+                                        severity=annotated.severity,
+                                    )
+                                    self.annotation_entries.append(entry)
+                                else:
+                                    logger.warning(
+                                        f"Failed to create thermal analysis for {panel.panel_id} defect {defect_idx}: "
+                                        f"annotator returned None (pixel={original_pixel_x:.1f},{original_pixel_y:.1f}, "
+                                        f"bbox={panel_bbox_visual})"
+                                    )
 
         reprojection_count = sum(1 for m in defect_matches.values() if m.method == "reprojection")
         gps_count = sum(1 for m in defect_matches.values() if m.method == "gps")
@@ -325,13 +483,12 @@ class GPSMatcher:
                         if temp_array is None:
                             continue
 
-                        # IMPORTANT: Thermal array is 640x512, visual image is 1280x1024
-                        # Scale coordinates from visual to thermal resolution
-                        h, w = temp_array.shape
-                        scale_x = w / 1280.0  # 640/1280 = 0.5
-                        scale_y = h / 1024.0  # 512/1024 = 0.5
-                        px = int(max(0, min(w - 1, match.pixel_x * scale_x)))
-                        py = int(max(0, min(h - 1, match.pixel_y * scale_y)))
+                        # Convert from visual (1280x1024) to thermal (640x512) coordinates
+                        # This applies any configured alignment offset
+                        from ..utils.thermal_alignment import visual_to_thermal, clamp_thermal_coords
+
+                        thermal_x, thermal_y = visual_to_thermal(match.pixel_x, match.pixel_y)
+                        px, py = clamp_thermal_coords(thermal_x, thermal_y)
 
                         temp_at_point = temp_array[py, px]
                         mean_temp = temp_array.mean()
@@ -449,6 +606,45 @@ class GPSMatcher:
 
         return closest
 
+    def _find_candidate_images(
+        self,
+        target_lat: float,
+        target_lon: float,
+        max_distance_deg: float = 0.0003,  # ~25-30m at typical latitudes
+        max_candidates: int = 5,
+    ) -> List[dict]:
+        """
+        Find multiple candidate images within distance, sorted by proximity.
+
+        Instead of returning just the closest image, this returns multiple
+        candidates so we can score them by temperature to find the one
+        that actually shows the hotspot.
+
+        Args:
+            target_lat: Target latitude
+            target_lon: Target longitude
+            max_distance_deg: Maximum distance in degrees (~0.0003 = ~30m)
+            max_candidates: Maximum number of candidates to return
+
+        Returns:
+            List of image metadata dicts, sorted by distance (closest first)
+        """
+        candidates = []
+
+        for image_meta in self.image_cache.values():
+            img_lat = image_meta["latitude"]
+            img_lon = image_meta["longitude"]
+
+            # Simple Euclidean distance in degrees
+            dist = np.hypot(target_lat - img_lat, target_lon - img_lon)
+
+            if dist <= max_distance_deg:
+                candidates.append((dist, image_meta))
+
+        # Sort by distance, return top N
+        candidates.sort(key=lambda x: x[0])
+        return [meta for _, meta in candidates[:max_candidates]]
+
     def _compute_flight_directions(self) -> None:
         """
         Determine flight direction for each image based on GPS trajectory.
@@ -510,3 +706,102 @@ class GPSMatcher:
             "Flight direction analysis: %d south-facing, %d north-facing images",
             south_count, north_count
         )
+
+    def export_annotation_manifest(self) -> AnnotationManifest:
+        """
+        Export all collected annotations as a manifest.
+
+        The manifest can be used by a frontend to display annotations for human review,
+        and to generate override files for re-rendering with corrected positions.
+
+        Returns:
+            AnnotationManifest with all annotations from this session
+        """
+        return AnnotationManifest(
+            project_id=settings.project_id,
+            user_id=settings.user_id,
+            generated_at=datetime.utcnow().isoformat() + "Z",
+            annotations=self.annotation_entries,
+        )
+
+    def apply_overrides(
+        self,
+        overrides: OverrideManifest,
+        raw_images_dir: Path,
+        output_dir: Path,
+    ) -> int:
+        """
+        Re-render annotations with human-provided override coordinates.
+
+        For each override in the manifest, re-renders the annotated thermal image
+        using the specified hot/cold point coordinates instead of auto-detection.
+
+        Args:
+            overrides: Override manifest from human review
+            raw_images_dir: Directory containing raw thermal images
+            output_dir: Directory to save re-rendered images
+
+        Returns:
+            Number of annotations successfully re-rendered
+        """
+        if not self.thermal_annotator:
+            logger.error("Cannot apply overrides: thermal annotator not initialized")
+            return 0
+
+        re_rendered = 0
+
+        for override in overrides.overrides:
+            # Find the original annotation entry
+            entry = self._find_annotation_entry(override.defect_id)
+            if not entry:
+                logger.warning(f"Override for unknown defect: {override.defect_id}")
+                continue
+
+            # Determine final hot/cold points (use override if provided, else original)
+            hot_point = override.hot_point if override.hot_point else entry.hot_point
+            cold_point = override.cold_point if override.cold_point else entry.cold_point
+
+            # Re-render with specified coordinates
+            raw_image_path = raw_images_dir / entry.raw_image_name
+            if not raw_image_path.exists():
+                logger.warning(f"Raw image not found for override: {entry.raw_image_name}")
+                continue
+
+            try:
+                annotated = self.thermal_annotator.create_annotated_image_with_points(
+                    raw_image_path=raw_image_path,
+                    hot_point=hot_point,
+                    cold_point=cold_point,
+                    panel_id=entry.panel_id,
+                    defect_index=entry.defect_index,
+                )
+
+                if annotated:
+                    output_path = output_dir / entry.annotated_image
+                    self.thermal_annotator.save_annotated_image(annotated, output_path)
+                    logger.info(f"Re-rendered with override: {entry.annotated_image}")
+                    re_rendered += 1
+
+                    # Update the entry with new coordinates and temperatures
+                    entry.hot_point = AnnotationPoint(
+                        x=hot_point.x, y=hot_point.y, temp=annotated.hot_cold.hot_temp
+                    )
+                    entry.cold_point = AnnotationPoint(
+                        x=cold_point.x, y=cold_point.y, temp=annotated.hot_cold.cold_temp
+                    )
+                    entry.delta_t = annotated.hot_cold.hot_temp - annotated.hot_cold.cold_temp
+                    entry.severity = annotated.severity
+                else:
+                    logger.warning(f"Failed to re-render {entry.defect_id}")
+            except Exception as e:
+                logger.error(f"Error applying override for {entry.defect_id}: {e}")
+
+        logger.info(f"Applied {re_rendered} annotation overrides")
+        return re_rendered
+
+    def _find_annotation_entry(self, defect_id: str) -> Optional[AnnotationEntry]:
+        """Find an annotation entry by defect ID."""
+        for entry in self.annotation_entries:
+            if entry.defect_id == defect_id:
+                return entry
+        return None

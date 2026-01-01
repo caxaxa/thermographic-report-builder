@@ -10,6 +10,13 @@ from .defect import (
 )
 from .report import ReportConfig, ReportMetadata, DefectMetrics
 from .job import JobInput, JobOutput
+from .annotation_manifest import (
+    AnnotationPoint,
+    AnnotationEntry,
+    AnnotationManifest,
+    AnnotationOverride,
+    OverrideManifest,
+)
 
 __all__ = [
     "DefectType",
@@ -23,4 +30,9 @@ __all__ = [
     "DefectMetrics",
     "JobInput",
     "JobOutput",
+    "AnnotationPoint",
+    "AnnotationEntry",
+    "AnnotationManifest",
+    "AnnotationOverride",
+    "OverrideManifest",
 ]

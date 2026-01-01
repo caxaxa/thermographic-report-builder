@@ -3,10 +3,14 @@
 Uses OpenSfM reconstruction data to project world coordinates back into
 source camera frames, enabling precise pixel-level correspondence between
 orthophoto defects and raw thermal images.
+
+For best accuracy, uses DSM (Digital Surface Model) to get the exact elevation
+at each orthophoto pixel - the same elevation ODM used when creating the orthophoto.
 """
 
 import json
 import numpy as np
+import rasterio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -50,6 +54,7 @@ class CameraProjector:
         self,
         reconstruction_json: Optional[dict],
         geo_converter: PixelToLatLonConverter,
+        dsm_path: Optional[Path] = None,
     ):
         """
         Initialize camera projector.
@@ -57,12 +62,30 @@ class CameraProjector:
         Args:
             reconstruction_json: Parsed reconstruction.json from OpenSfM, or None
             geo_converter: Converter for ortho pixels to world coordinates
+            dsm_path: Optional path to DSM (Digital Surface Model) for precise elevation
         """
         self.geo_converter = geo_converter
 
         # Raw thermal images and reconstruction use the same resolution: 1280x1024
         self.image_width = 1280
         self.image_height = 1024
+
+        # Load DSM for precise per-pixel elevation
+        self._dsm_data = None
+        self._dsm_transform = None
+        if dsm_path and dsm_path.exists():
+            try:
+                with rasterio.open(dsm_path) as dsm:
+                    self._dsm_data = dsm.read(1)  # Single band elevation data
+                    self._dsm_transform = dsm.transform
+                    self._dsm_nodata = dsm.nodata
+                logger.info(
+                    f"Loaded DSM for precise elevation: {self._dsm_data.shape}, "
+                    f"range [{np.nanmin(self._dsm_data):.1f}, {np.nanmax(self._dsm_data):.1f}]m"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to load DSM, will use estimated elevation: {e}")
+                self._dsm_data = None
 
         if reconstruction_json is None:
             self.available = False
@@ -124,17 +147,119 @@ class CameraProjector:
         self.available = len(self.shots) > 0
 
         if self.available:
+            dsm_status = "with DSM" if self._dsm_data is not None else "estimated elevation"
             logger.info(
-                f"Camera projector initialized with {len(self.shots)} camera poses"
+                f"Camera projector initialized with {len(self.shots)} camera poses ({dsm_status})"
             )
         else:
             logger.warning("No camera shots in reconstruction.json")
+
+    def get_elevation_at_ortho_pixel(self, ortho_x: float, ortho_y: float) -> float:
+        """
+        Get precise elevation at an orthophoto pixel from DSM using bilinear interpolation.
+
+        The DSM and orthophoto share the same georeferencing, so we can directly
+        look up the elevation. This gives us the exact elevation ODM used when
+        creating that orthophoto pixel.
+
+        Uses bilinear interpolation instead of nearest neighbor to avoid
+        elevation jumps at panel edges which can cause significant projection errors
+        (0.5m Z error at 25m altitude = ~15 pixel horizontal shift).
+
+        Args:
+            ortho_x: X coordinate in orthophoto (pixels)
+            ortho_y: Y coordinate in orthophoto (pixels)
+
+        Returns:
+            Elevation in meters (local ENU Z coordinate)
+        """
+        if self._dsm_data is None:
+            # Log warning only once per session to avoid spam
+            if not getattr(self, '_dsm_warning_logged', False):
+                logger.warning(
+                    f"DSM not available, using fallback elevation {self._ground_elevation:.1f}m. "
+                    f"Projection accuracy may be reduced by ~15px for 0.5m height errors."
+                )
+                self._dsm_warning_logged = True
+            return self._ground_elevation
+
+        # Convert orthophoto pixel to UTM using orthophoto transform
+        # Add 0.5 for pixel center (consistent with _ortho_to_world)
+        ortho_transform = self.geo_converter.transform
+        utm_x = ortho_transform.c + (ortho_x + 0.5) * ortho_transform.a + (ortho_y + 0.5) * ortho_transform.b
+        utm_y = ortho_transform.f + (ortho_x + 0.5) * ortho_transform.d + (ortho_y + 0.5) * ortho_transform.e
+
+        # Convert UTM to DSM pixel coordinates using DSM transform
+        # DSM pixel = inverse_transform(UTM)
+        dsm_transform = self._dsm_transform
+        # Inverse affine: col = (x - c) / a, row = (y - f) / e (for non-rotated)
+        dsm_col = (utm_x - dsm_transform.c) / dsm_transform.a
+        dsm_row = (utm_y - dsm_transform.f) / dsm_transform.e
+
+        dsm_h, dsm_w = self._dsm_data.shape
+
+        # Check if completely out of bounds
+        if dsm_col < 0 or dsm_col >= dsm_w or dsm_row < 0 or dsm_row >= dsm_h:
+            return self._ground_elevation
+
+        # Bilinear interpolation
+        # Get integer coordinates and fractional parts
+        col0 = int(np.floor(dsm_col))
+        row0 = int(np.floor(dsm_row))
+        col1 = min(col0 + 1, dsm_w - 1)
+        row1 = min(row0 + 1, dsm_h - 1)
+
+        # Clamp col0/row0 to valid range
+        col0 = max(0, min(dsm_w - 1, col0))
+        row0 = max(0, min(dsm_h - 1, row0))
+
+        # Fractional distances
+        dx = dsm_col - col0
+        dy = dsm_row - row0
+
+        # Get the four corner elevations
+        z00 = self._dsm_data[row0, col0]
+        z01 = self._dsm_data[row0, col1]
+        z10 = self._dsm_data[row1, col0]
+        z11 = self._dsm_data[row1, col1]
+
+        # Check for nodata values - if any corner is nodata, fall back to nearest valid
+        if self._dsm_nodata is not None:
+            corners = [z00, z01, z10, z11]
+            valid_corners = [z for z in corners if z != self._dsm_nodata and not np.isnan(z)]
+            if len(valid_corners) == 0:
+                return self._ground_elevation
+            elif len(valid_corners) < 4:
+                # Use mean of valid corners as fallback
+                elevation_utm = float(np.mean(valid_corners))
+            else:
+                # Bilinear interpolation: lerp in x, then lerp in y
+                z_top = z00 * (1 - dx) + z01 * dx
+                z_bot = z10 * (1 - dx) + z11 * dx
+                elevation_utm = z_top * (1 - dy) + z_bot * dy
+        else:
+            # No nodata handling needed
+            z_top = z00 * (1 - dx) + z01 * dx
+            z_bot = z10 * (1 - dx) + z11 * dx
+            elevation_utm = z_top * (1 - dy) + z_bot * dy
+
+        # Convert UTM elevation to local ENU Z
+        # OpenSfM reference_lla includes altitude, but local Z is relative to that
+        # The DSM values are in the same vertical datum as the orthophoto (UTM)
+        # We need to convert to local ENU: Z_enu = Z_utm - reference_altitude
+        if self.reference_lla:
+            ref_alt = self.reference_lla.get("altitude", 0)
+            elevation_enu = elevation_utm - ref_alt
+        else:
+            elevation_enu = elevation_utm
+
+        return float(elevation_enu)
 
     def project_ortho_to_raw(
         self,
         ortho_x: float,
         ortho_y: float,
-        elevation: float = 0.0,
+        elevation: Optional[float] = None,
         max_gps_distance: float = 15.0,
     ) -> List[RawImageMatch]:
         """
@@ -143,7 +268,8 @@ class CameraProjector:
         Args:
             ortho_x: X coordinate in orthophoto (pixels)
             ortho_y: Y coordinate in orthophoto (pixels)
-            elevation: Ground elevation at this point (meters, from DSM)
+            elevation: Ground elevation at this point (meters). If None, automatically
+                      looks up from DSM for precise elevation.
             max_gps_distance: Maximum horizontal distance (meters) from drone to defect.
                              Images where drone was farther than this are excluded.
 
@@ -153,6 +279,10 @@ class CameraProjector:
         """
         if not self.available:
             return []
+
+        # Get precise elevation from DSM if not provided
+        if elevation is None:
+            elevation = self.get_elevation_at_ortho_pixel(ortho_x, ortho_y)
 
         # Convert orthophoto pixel to world coordinates (local ENU)
         world_x, world_y = self._ortho_to_world(ortho_x, ortho_y)
@@ -229,7 +359,7 @@ class CameraProjector:
         ortho_x: float,
         ortho_y: float,
         image_name: str,
-        elevation: float = 0.0,
+        elevation: Optional[float] = None,
     ) -> Optional[Tuple[float, float]]:
         """
         Project orthophoto coordinates to a specific raw image.
@@ -241,7 +371,7 @@ class CameraProjector:
             ortho_x: X coordinate in orthophoto (pixels)
             ortho_y: Y coordinate in orthophoto (pixels)
             image_name: Name of the target image (e.g., "DJI_20230612111751_0126_T.JPG")
-            elevation: Ground elevation (meters), defaults to estimated ground level
+            elevation: Ground elevation (meters). If None, automatically looks up from DSM.
 
         Returns:
             (pixel_x, pixel_y) tuple or None if projection fails
@@ -255,9 +385,9 @@ class CameraProjector:
             logger.debug(f"Image {image_name} not found in reconstruction")
             return None
 
-        # Use estimated ground elevation if not provided
-        if elevation == 0.0:
-            elevation = self._ground_elevation
+        # Get precise elevation from DSM if not provided
+        if elevation is None:
+            elevation = self.get_elevation_at_ortho_pixel(ortho_x, ortho_y)
 
         # Convert orthophoto pixel to world coordinates
         world_x, world_y = self._ortho_to_world(ortho_x, ortho_y)
@@ -286,11 +416,17 @@ class CameraProjector:
         coordinates relative to reference_lla. We need to:
         1. Convert ortho pixel to UTM using the GeoTIFF transform
         2. Subtract the reference point UTM to get local ENU (X=East, Y=North)
+
+        IMPORTANT: The affine transform maps pixel CORNERS, not centers.
+        To get the center of a pixel, we add 0.5 to both coordinates.
+        This prevents a systematic half-pixel shift that gets amplified
+        after reprojection (at ~3cm GSD, half pixel = 1.5cm error).
         """
         # Use the GeoTIFF transform to get UTM coordinates
+        # Add 0.5 to convert from pixel corner to pixel CENTER
         transform = self.geo_converter.transform
-        utm_x = transform.c + ortho_x * transform.a + ortho_y * transform.b
-        utm_y = transform.f + ortho_x * transform.d + ortho_y * transform.e
+        utm_x = transform.c + (ortho_x + 0.5) * transform.a + (ortho_y + 0.5) * transform.b
+        utm_y = transform.f + (ortho_x + 0.5) * transform.d + (ortho_y + 0.5) * transform.e
 
         # Convert to local ENU by subtracting reference point
         if self._ref_utm_x is not None and self._ref_utm_y is not None:
@@ -353,18 +489,30 @@ class CameraProjector:
         c_y = camera.get("c_y", 0.0)  # Principal point offset Y
         k1 = camera.get("k1", 0.0)
         k2 = camera.get("k2", 0.0)
+        k3 = camera.get("k3", 0.0)
+        p1 = camera.get("p1", 0.0)  # Tangential distortion
+        p2 = camera.get("p2", 0.0)
 
-        # Apply radial distortion
+        # Apply radial distortion (k1, k2, k3)
         r2 = x * x + y * y
-        distortion = 1.0 + k1 * r2 + k2 * r2 * r2
-        x_distorted = x * distortion
-        y_distorted = y * distortion
+        r4 = r2 * r2
+        r6 = r4 * r2
+        radial_distortion = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
+
+        # Apply tangential distortion (p1, p2)
+        x_tangential = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
+        y_tangential = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
+
+        x_distorted = x * radial_distortion + x_tangential
+        y_distorted = y * radial_distortion + y_tangential
 
         # Convert to pixel coordinates
         # OpenSfM uses normalized coordinates where focal is relative to max(width, height)
+        # The denormalization formula from OpenSfM docs:
+        #   pixel = normalized * max(w,h) + (dimension - 1) / 2
         max_size = max(self.image_width, self.image_height)
-        pixel_x = x_distorted * focal_x * max_size + self.image_width / 2 + c_x * max_size
-        pixel_y = y_distorted * focal_y * max_size + self.image_height / 2 + c_y * max_size
+        pixel_x = x_distorted * focal_x * max_size + (self.image_width - 1) / 2.0 + c_x * max_size
+        pixel_y = y_distorted * focal_y * max_size + (self.image_height - 1) / 2.0 + c_y * max_size
 
         return pixel_x, pixel_y
 

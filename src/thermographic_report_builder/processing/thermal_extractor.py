@@ -2,14 +2,22 @@
 
 Uses thermal_parser to read radiometric data from DJI R-JPEG images
 and calculate temperature differences for defect analysis.
+
+Supports calibrated temperature extraction using DJI DIRP2 API with:
+- Emissivity correction for solar panel surfaces
+- Object distance (flight altitude) compensation
+- Relative humidity correction
+- Reflected apparent temperature compensation
 """
 
+import re
 import numpy as np
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
 
 from ..utils.logger import get_logger
+from ..config import settings
 
 logger = get_logger(__name__)
 
@@ -49,16 +57,80 @@ class TemperatureReading:
             return "MINIMAL"
 
 
-class ThermalExtractor:
-    """Extract temperature data from DJI thermal images."""
+@dataclass
+class ThermalCalibration:
+    """Calibration parameters for thermal image processing."""
 
-    def __init__(self):
-        """Initialize thermal extractor."""
+    emissivity: float = 0.95  # Solar panel surface emissivity
+    object_distance: float = 25.0  # Distance from camera to target (meters)
+    relative_humidity: float = 50.0  # Ambient relative humidity (%)
+    reflected_temp: float = 25.0  # Reflected apparent temperature (Celsius)
+
+    @classmethod
+    def from_settings(cls) -> "ThermalCalibration":
+        """Create calibration from application settings."""
+        return cls(
+            emissivity=settings.thermal_emissivity,
+            object_distance=settings.thermal_object_distance,
+            relative_humidity=settings.thermal_relative_humidity,
+            reflected_temp=settings.thermal_reflected_temp,
+        )
+
+
+def extract_altitude_from_exif(image_path: Path) -> Optional[float]:
+    """
+    Extract relative altitude from DJI image EXIF/XMP metadata.
+
+    Reads the XMP data embedded in the JPEG to find drone-dji:RelativeAltitude.
+
+    Args:
+        image_path: Path to the thermal image
+
+    Returns:
+        Altitude in meters, or None if not found
+    """
+    try:
+        # Read file and search for DJI relative altitude in XMP
+        with open(image_path, 'rb') as f:
+            content = f.read()
+
+        # Look for drone-dji:RelativeAltitude in XMP
+        match = re.search(rb'drone-dji:RelativeAltitude="([^"]+)"', content)
+        if match:
+            altitude_str = match.group(1).decode('utf-8')
+            altitude = float(altitude_str.replace('+', ''))
+            logger.debug(f"Extracted altitude from XMP: {altitude}m")
+            return altitude
+
+    except Exception as e:
+        logger.debug(f"Failed to extract altitude from EXIF: {e}")
+
+    return None
+
+
+class ThermalExtractor:
+    """Extract temperature data from DJI thermal images with calibration support."""
+
+    def __init__(self, calibration: Optional[ThermalCalibration] = None):
+        """
+        Initialize thermal extractor with optional calibration.
+
+        Args:
+            calibration: Calibration parameters. Uses settings defaults if None.
+        """
+        self.calibration = calibration or ThermalCalibration.from_settings()
+
         if THERMAL_PARSER_AVAILABLE and Thermal is not None:
             try:
                 self.thermal = Thermal(dtype=np.float32)
                 self.available = True
-                logger.info("Thermal extractor initialized")
+                logger.info(
+                    f"Thermal extractor initialized with calibration: "
+                    f"emissivity={self.calibration.emissivity}, "
+                    f"distance={self.calibration.object_distance}m, "
+                    f"humidity={self.calibration.relative_humidity}%, "
+                    f"reflected_temp={self.calibration.reflected_temp}C"
+                )
             except SystemExit:
                 # thermal_parser calls sys.exit() if DJI SDK libraries are missing
                 logger.warning("thermal_parser SDK libraries not available - temperature extraction disabled")
@@ -72,6 +144,70 @@ class ThermalExtractor:
         else:
             self.thermal = None
             self.available = False
+
+    def _parse_thermal_image(
+        self,
+        image_path: Path,
+        use_calibration: bool = True,
+    ) -> Optional[np.ndarray]:
+        """
+        Parse thermal image with optional calibration.
+
+        Uses parse_dirp2() with calibration parameters for accurate temperature
+        readings, falling back to parse() if calibration fails.
+
+        Args:
+            image_path: Path to the thermal R-JPEG image
+            use_calibration: Whether to use calibrated parsing (DIRP2)
+
+        Returns:
+            2D numpy array of temperatures in Celsius, or None if fails
+        """
+        if not self.available:
+            return None
+
+        try:
+            if use_calibration:
+                # Determine object distance
+                object_distance = self.calibration.object_distance
+
+                # Try to extract actual altitude from EXIF if auto_altitude is enabled
+                if settings.thermal_auto_altitude:
+                    exif_altitude = extract_altitude_from_exif(image_path)
+                    if exif_altitude is not None:
+                        # Clamp to valid range (1-25m)
+                        object_distance = max(1.0, min(25.0, exif_altitude))
+                        logger.debug(f"Using EXIF altitude: {object_distance}m")
+
+                # Use calibrated parsing with DIRP2
+                temp_array = self.thermal.parse_dirp2(
+                    filepath_image=str(image_path),
+                    image_height=512,
+                    image_width=640,
+                    object_distance=object_distance,
+                    relative_humidity=self.calibration.relative_humidity,
+                    emissivity=self.calibration.emissivity,
+                    reflected_apparent_temperature=self.calibration.reflected_temp,
+                )
+
+                if temp_array is not None:
+                    logger.debug(
+                        f"Calibrated thermal parse successful: "
+                        f"distance={object_distance}m, emissivity={self.calibration.emissivity}"
+                    )
+                    return temp_array
+
+            # Fallback to simple parsing without calibration
+            logger.debug("Using uncalibrated thermal parsing")
+            return self.thermal.parse(filepath_image=str(image_path))
+
+        except Exception as e:
+            logger.warning(f"Calibrated parsing failed, trying uncalibrated: {e}")
+            try:
+                return self.thermal.parse(filepath_image=str(image_path))
+            except Exception as e2:
+                logger.warning(f"Uncalibrated parsing also failed: {e2}")
+                return None
 
     def extract_temperature_at_pixel(
         self,
@@ -101,8 +237,8 @@ class ThermalExtractor:
             return None
 
         try:
-            # Parse thermal image
-            temp_array = self.thermal.parse(filepath_image=str(image_path))
+            # Parse thermal image with calibration
+            temp_array = self._parse_thermal_image(image_path, use_calibration=True)
 
             if temp_array is None:
                 logger.warning(f"Failed to parse thermal data from {image_path}")
@@ -110,17 +246,15 @@ class ThermalExtractor:
 
             height, width = temp_array.shape
 
-            # IMPORTANT: Thermal array is 640x512, visual image is 1280x1024
-            # Scale coordinates from visual (1280x1024) to thermal (640x512) resolution
-            scale_x = width / 1280.0   # 640/1280 = 0.5
-            scale_y = height / 1024.0  # 512/1024 = 0.5
+            # Convert from visual (1280x1024) to thermal (640x512) coordinates
+            # This applies any configured alignment offset and scales by 0.5
+            from ..utils.thermal_alignment import visual_to_thermal, clamp_thermal_coords, SCALE_X
 
-            # Scale and clamp pixel coordinates to thermal array bounds
-            pixel_x = int(max(0, min(width - 1, int(pixel_x) * scale_x)))
-            pixel_y = int(max(0, min(height - 1, int(pixel_y) * scale_y)))
+            thermal_x, thermal_y = visual_to_thermal(pixel_x, pixel_y)
+            pixel_x, pixel_y = clamp_thermal_coords(thermal_x, thermal_y)
 
             # Also scale the sample radius for the thermal resolution
-            sample_radius = int(sample_radius * scale_x)
+            sample_radius = int(sample_radius * SCALE_X)
 
             # Get temperature at defect location
             defect_temp = float(temp_array[pixel_y, pixel_x])
@@ -162,7 +296,7 @@ class ThermalExtractor:
                 # Fallback if mask is empty
                 panel_avg = float(np.mean(panel_temp_region))
 
-            # Calculate ΔT
+            # Calculate delta T
             delta_t = defect_temp - panel_avg
 
             reading = TemperatureReading(
@@ -174,8 +308,8 @@ class ThermalExtractor:
             )
 
             logger.debug(
-                f"Temperature extracted: defect={reading.defect_temp_celsius}°C, "
-                f"panel_avg={reading.panel_avg_celsius}°C, ΔT={reading.delta_t}°C"
+                f"Temperature extracted (calibrated): defect={reading.defect_temp_celsius}C, "
+                f"panel_avg={reading.panel_avg_celsius}C, delta_t={reading.delta_t}C"
             )
 
             return reading
@@ -212,21 +346,21 @@ class ThermalExtractor:
             return initial_x, initial_y, 0.0
 
         try:
-            temp_array = self.thermal.parse(filepath_image=str(image_path))
+            temp_array = self._parse_thermal_image(image_path, use_calibration=True)
             if temp_array is None:
                 return initial_x, initial_y, 0.0
 
             height, width = temp_array.shape
 
-            # IMPORTANT: Thermal array is 640x512, visual image is 1280x1024
-            # Scale coordinates from visual to thermal resolution
-            scale_x = width / 1280.0   # 640/1280 = 0.5
-            scale_y = height / 1024.0  # 512/1024 = 0.5
+            # Convert from visual (1280x1024) to thermal (640x512) coordinates
+            # This applies any configured alignment offset
+            from ..utils.thermal_alignment import (
+                visual_to_thermal, thermal_to_visual, clamp_thermal_coords, SCALE_X
+            )
 
-            # Convert initial coordinates to thermal resolution
-            thermal_x = int(initial_x * scale_x)
-            thermal_y = int(initial_y * scale_y)
-            thermal_radius = int(search_radius * scale_x)
+            thermal_x_f, thermal_y_f = visual_to_thermal(initial_x, initial_y)
+            thermal_x, thermal_y = clamp_thermal_coords(thermal_x_f, thermal_y_f)
+            thermal_radius = int(search_radius * SCALE_X)
 
             # Define search region in thermal coordinates
             x1 = max(0, thermal_x - thermal_radius)
@@ -250,21 +384,24 @@ class ThermalExtractor:
             ])
 
             # Convert hotspot coordinates back to visual resolution
-            visual_hotspot_x = int(thermal_hotspot_x / scale_x)
-            visual_hotspot_y = int(thermal_hotspot_y / scale_y)
+            visual_hotspot_x, visual_hotspot_y = thermal_to_visual(
+                thermal_hotspot_x, thermal_hotspot_y
+            )
+            visual_hotspot_x = int(visual_hotspot_x)
+            visual_hotspot_y = int(visual_hotspot_y)
 
             # Only use the hotspot if it's significantly warmer than initial point
             # This avoids jumping to a different hotspot in the same image
-            if max_temp > initial_temp + 2.0:  # At least 2°C warmer
+            if max_temp > initial_temp + 2.0:  # At least 2C warmer
                 logger.info(
                     f"Hotspot search: adjusted ({initial_x}, {initial_y}) -> ({visual_hotspot_x}, {visual_hotspot_y}), "
-                    f"temp {initial_temp:.1f}°C -> {max_temp:.1f}°C (+{max_temp - initial_temp:.1f}°C)"
+                    f"temp {initial_temp:.1f}C -> {max_temp:.1f}C (+{max_temp - initial_temp:.1f}C)"
                 )
                 return visual_hotspot_x, visual_hotspot_y, max_temp
             else:
                 logger.debug(
                     f"Hotspot search: keeping initial ({initial_x}, {initial_y}), "
-                    f"max in region only {max_temp - initial_temp:.1f}°C warmer"
+                    f"max in region only {max_temp - initial_temp:.1f}C warmer"
                 )
                 return initial_x, initial_y, initial_temp
 
@@ -272,12 +409,17 @@ class ThermalExtractor:
             logger.warning(f"Hotspot search failed for {image_path}: {e}")
             return initial_x, initial_y, 0.0
 
-    def get_full_temperature_array(self, image_path: Path) -> Optional[np.ndarray]:
+    def get_full_temperature_array(
+        self,
+        image_path: Path,
+        use_calibration: bool = True,
+    ) -> Optional[np.ndarray]:
         """
         Get the full temperature array from a thermal image.
 
         Args:
             image_path: Path to DJI thermal R-JPEG image
+            use_calibration: Whether to use calibrated parsing
 
         Returns:
             2D numpy array of temperatures in Celsius, or None if fails
@@ -285,8 +427,4 @@ class ThermalExtractor:
         if not self.available:
             return None
 
-        try:
-            return self.thermal.parse(filepath_image=str(image_path))
-        except Exception as e:
-            logger.warning(f"Failed to get temperature array from {image_path}: {e}")
-            return None
+        return self._parse_thermal_image(image_path, use_calibration=use_calibration)
