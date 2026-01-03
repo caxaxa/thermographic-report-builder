@@ -8,7 +8,7 @@ from .exceptions import (
     ImageProcessingError,
     ReportGenerationError,
 )
-from .geospatial import PixelToLatLonConverter
+from .geospatial import PixelToLatLonConverter, reverse_geocode, get_orthophoto_center
 
 __all__ = [
     "setup_logging",
@@ -19,4 +19,6 @@ __all__ = [
     "ImageProcessingError",
     "ReportGenerationError",
     "PixelToLatLonConverter",
+    "reverse_geocode",
+    "get_orthophoto_center",
 ]

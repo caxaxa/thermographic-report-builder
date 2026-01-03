@@ -261,6 +261,26 @@ class GPSMatcher:
                                     f"Reprojection failed for {panel.panel_id} defect {defect_idx}, "
                                     f"using image center as fallback"
                                 )
+
+                            # Refine to the hottest nearby pixel to avoid edge offsets
+                            try:
+                                hot_x, hot_y, hot_temp = self.thermal_extractor.find_local_hotspot(
+                                    image_path=match.image_path,
+                                    initial_x=int(original_pixel_x),
+                                    initial_y=int(original_pixel_y),
+                                    search_radius=120,
+                                )
+                                if (hot_x, hot_y) != (int(original_pixel_x), int(original_pixel_y)):
+                                    logger.info(
+                                        f"Refined hotspot for {panel.panel_id} defect {defect_idx}: "
+                                        f"({original_pixel_x:.1f},{original_pixel_y:.1f}) -> ({hot_x},{hot_y}) "
+                                        f"with temp {hot_temp:.1f}C"
+                                    )
+                                    original_pixel_x, original_pixel_y = float(hot_x), float(hot_y)
+                                    match.pixel_x, match.pixel_y = original_pixel_x, original_pixel_y
+                            except Exception as refine_err:
+                                logger.debug(f"Hotspot refinement skipped: {refine_err}")
+
                             # Extract temperature data
                             match.temperature = self.thermal_extractor.extract_temperature_at_pixel(
                                 image_path=match.image_path,
@@ -381,6 +401,19 @@ class GPSMatcher:
                                         annotated, annotated_path
                                     )
                                     logger.info(f"Saved thermal analysis: {annotated_filename}")
+
+                                    # Create annotated raw image with zoom box indicator
+                                    # This shows users where the thermal crop comes from
+                                    self._save_annotated_raw_image(
+                                        raw_image_path=match.image_path,
+                                        hot_point_x=annotated.hot_cold.hot_x,
+                                        hot_point_y=annotated.hot_cold.hot_y,
+                                        zoom_size=200,  # Same as thermal_annotator default
+                                        output_dir=output_dir,
+                                        defect_type_str=defect_type_str,
+                                        panel_id=panel.panel_id,
+                                        flight_dir=flight_dir,
+                                    )
 
                                     # Record annotation entry for manifest
                                     defect_id = f"{defect_type_str}_({panel.panel_id})_defeito{defect_idx + 1}"
@@ -547,6 +580,92 @@ class GPSMatcher:
             )
 
         return None
+
+    def _save_annotated_raw_image(
+        self,
+        raw_image_path: Path,
+        hot_point_x: int,
+        hot_point_y: int,
+        zoom_size: int,
+        output_dir: Path,
+        defect_type_str: str,
+        panel_id: str,
+        flight_dir: str,
+    ) -> None:
+        """
+        Save annotated raw drone image with zoom box indicator.
+
+        Creates a version of the raw thermal image with a blue rectangle
+        showing where the thermal analysis crop is taken from. This helps
+        users understand the context of the zoomed thermal analysis.
+
+        Args:
+            raw_image_path: Path to raw thermal image
+            hot_point_x: X coordinate of hottest point (visual coords)
+            hot_point_y: Y coordinate of hottest point (visual coords)
+            zoom_size: Size of zoom window used in thermal analysis
+            output_dir: Directory to save output
+            defect_type_str: Defect type string (e.g., "hotspots")
+            panel_id: Panel identifier
+            flight_dir: Flight direction for rotation
+        """
+        try:
+            # Load raw image
+            img, _ = load_raw_image_with_exif(raw_image_path)
+
+            # Rotate if flying south (same as main image)
+            if flight_dir == "south":
+                img = cv2.rotate(img, cv2.ROTATE_180)
+                # Also transform coordinates for rotated image
+                img_h, img_w = img.shape[:2]
+                hot_point_x = img_w - hot_point_x
+                hot_point_y = img_h - hot_point_y
+
+            # Calculate zoom box bounds (same as thermal_annotator)
+            half_size = zoom_size // 2
+            img_h, img_w = img.shape[:2]
+            x1 = max(0, hot_point_x - half_size)
+            y1 = max(0, hot_point_y - half_size)
+            x2 = min(img_w, hot_point_x + half_size)
+            y2 = min(img_h, hot_point_y + half_size)
+
+            # Draw blue rectangle showing zoom area
+            # Use thick stroke for visibility
+            stroke_thickness = 4
+            cv2.rectangle(
+                img,
+                (x1, y1),
+                (x2, y2),
+                (255, 128, 0),  # BGR: Light blue/cyan color
+                stroke_thickness,
+            )
+
+            # Add corner markers for extra visibility
+            corner_len = 20
+            # Top-left corner
+            cv2.line(img, (x1, y1), (x1 + corner_len, y1), (255, 128, 0), stroke_thickness + 2)
+            cv2.line(img, (x1, y1), (x1, y1 + corner_len), (255, 128, 0), stroke_thickness + 2)
+            # Top-right corner
+            cv2.line(img, (x2, y1), (x2 - corner_len, y1), (255, 128, 0), stroke_thickness + 2)
+            cv2.line(img, (x2, y1), (x2, y1 + corner_len), (255, 128, 0), stroke_thickness + 2)
+            # Bottom-left corner
+            cv2.line(img, (x1, y2), (x1 + corner_len, y2), (255, 128, 0), stroke_thickness + 2)
+            cv2.line(img, (x1, y2), (x1, y2 - corner_len), (255, 128, 0), stroke_thickness + 2)
+            # Bottom-right corner
+            cv2.line(img, (x2, y2), (x2 - corner_len, y2), (255, 128, 0), stroke_thickness + 2)
+            cv2.line(img, (x2, y2), (x2, y2 - corner_len), (255, 128, 0), stroke_thickness + 2)
+
+            # Resize to half size (same as main drone image)
+            img_resized = cv2.resize(img, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+
+            # Save with _zoombox suffix (this will be used for frontend hover)
+            filename = f"{defect_type_str}_({panel_id})_zoombox.jpg"
+            output_path = output_dir / filename
+            save_image(img_resized, output_path, quality=settings.jpeg_quality)
+            logger.debug(f"Saved annotated raw image with zoom box: {filename}")
+
+        except Exception as e:
+            logger.warning(f"Failed to create annotated raw image for {panel_id}: {e}")
 
     def _index_raw_images(self, temp_dir: Path) -> None:
         """Download and index all raw images with GPS data."""

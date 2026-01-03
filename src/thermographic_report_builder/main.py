@@ -11,7 +11,7 @@ from .processing import DefectMapper, annotate_orthophoto, create_layer_image, c
 from .report import ReportBuilder, export_metrics_json, export_metrics_csv, export_panel_grid_json
 from .models.report import ReportConfig
 from .models.job import JobOutput
-from .utils import setup_logging, get_logger, PixelToLatLonConverter
+from .utils import setup_logging, get_logger, PixelToLatLonConverter, reverse_geocode, get_orthophoto_center
 from .utils.exceptions import ProcessingError
 from .utils.thermal_alignment import log_alignment_config
 
@@ -246,12 +246,23 @@ def main() -> int:
         logger.info("STEP 8: Generating LaTeX report")
         logger.info("=" * 80)
 
+        # Derive location from orthophoto center if not explicitly set
+        report_location = settings.location
+        if not report_location:
+            try:
+                center_lat, center_lon = get_orthophoto_center(transform, img_w, img_h, crs)
+                logger.info(f"Orthophoto center: ({center_lat:.6f}, {center_lon:.6f})")
+                report_location = reverse_geocode(center_lat, center_lon)
+            except Exception as e:
+                logger.warning(f"Could not derive location from orthophoto: {e}")
+                report_location = ""
+
         report_config = ReportConfig(
             area_name=settings.area_name,
             client_name=settings.client_name,
             engineer_name=settings.engineer_name,
             crea_number=settings.crea_number,
-            location=settings.location,
+            location=report_location,
             address=settings.address,
         )
 
@@ -283,12 +294,14 @@ def main() -> int:
         metrics_csv_path = export_metrics_csv(panel_grid, work_dir / "metrics.csv")
 
         # Export panel_grid.json for interactive defect map (with report-aligned panel IDs)
+        # Pass images_dir so it can check for annotated thermal images
         panel_grid_json_path = export_panel_grid_json(
             panel_grid,
             work_dir / "panel_grid.json",
             ortho_width=img_w,
             ortho_height=img_h,
             ortho_scale_factor=settings.orthophoto_downscale_factor,
+            images_dir=images_dir,
         )
 
         # ===== STEP 10: Compile LaTeX to PDF =====

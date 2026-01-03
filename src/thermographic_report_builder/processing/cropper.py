@@ -147,7 +147,7 @@ def _create_mini_map(
         defect_type: Type of defect
         output_dir: Directory to save mini-map
     """
-    from reportlab.graphics.shapes import Polygon, String
+    from reportlab.graphics.shapes import Polygon
 
     # Scale to fit within A4 page dimensions (in points: 1 inch = 72 points)
     # A4 is 595 x 842 points, leave margins for LaTeX embedding
@@ -167,10 +167,6 @@ def _create_mini_map(
 
     # Add white background
     drawing.add(Rect(0, 0, pdf_width, pdf_height, fillColor=colors.white, strokeColor=None))
-
-    # Scale font size (keep readable but proportional)
-    base_font_size = 20
-    scaled_font_size = max(6, min(14, base_font_size * scale_factor * 10))
 
     # Recreate the layer by drawing panels and defects
     # (Similar to what create_layer_image does)
@@ -197,9 +193,7 @@ def _create_mini_map(
         stroke_width = max(0.5, 1 * scale_factor)
         drawing.add(Polygon(pts, fillColor=fill_color, strokeColor=stroke_color, strokeWidth=stroke_width))
 
-        # Add panel label
-        label_str = f"{panel.column}-{panel.row}"
-        drawing.add(String(x_draw, y_draw + h_draw + 2 * scale_factor, label_str, fontSize=scaled_font_size, fillColor=colors.black))
+        # Note: Panel labels removed to reduce visual clutter on mini-maps
 
     # Calculate crop rectangle coordinates (scaled)
     # Note: ReportLab uses bottom-left origin, so transform y coordinates

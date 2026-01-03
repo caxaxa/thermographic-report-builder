@@ -2,7 +2,7 @@
 
 This module generates professional annotated thermal images that show:
 - Zoomed view of the defect area in the raw thermal image
-- Temperature colorbar overlay
+- Temperature colorbar overlay (matching detected palette)
 - RED marker on hottest point (detected hotspot)
 - BLUE marker on coolest reference point (in outer ring)
 - Temperature readings for both points and delta T
@@ -10,6 +10,7 @@ This module generates professional annotated thermal images that show:
 
 import cv2
 import numpy as np
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
@@ -18,6 +19,147 @@ from ..utils.logger import get_logger
 from .thermal_extractor import ThermalExtractor, TemperatureReading
 
 logger = get_logger(__name__)
+
+
+def detect_thermal_palette(image_path: Path) -> str:
+    """
+    Detect the color palette used in a DJI thermal image.
+
+    Reads the EXIF 'Image Description' field which contains the palette name.
+    Common DJI palettes: WhiteHot, BlackHot, Iron, IronRed, Rainbow, Fulgurite, Medical
+
+    Args:
+        image_path: Path to DJI thermal R-JPEG image
+
+    Returns:
+        Palette name (lowercase) or 'whitehot' as default
+    """
+    try:
+        result = subprocess.run(
+            ['exiftool', '-ImageDescription', '-s', '-s', '-s', str(image_path)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            palette = result.stdout.strip().lower()
+            logger.debug(f"Detected thermal palette: {palette}")
+            return palette
+    except Exception as e:
+        logger.debug(f"Could not detect palette from {image_path}: {e}")
+
+    return "whitehot"  # Default
+
+
+def create_colorbar(
+    height: int,
+    width: int,
+    palette: str = "whitehot",
+) -> np.ndarray:
+    """
+    Create a colorbar image matching the thermal palette.
+
+    Args:
+        height: Height of colorbar in pixels
+        width: Width of colorbar in pixels
+        palette: Palette name (whitehot, blackhot, iron, rainbow, fulgurite, medical)
+
+    Returns:
+        BGR colorbar image (numpy array)
+    """
+    colorbar = np.zeros((height, width, 3), dtype=np.uint8)
+
+    palette = palette.lower().strip()
+
+    for i in range(height):
+        # ratio goes from 1.0 (top, hot) to 0.0 (bottom, cold)
+        ratio = 1.0 - (i / height)
+
+        if palette == "whitehot":
+            # White = hot, Black = cold (grayscale)
+            gray_value = int(255 * ratio)
+            colorbar[i, :] = (gray_value, gray_value, gray_value)
+
+        elif palette == "blackhot":
+            # Black = hot, White = cold (inverted grayscale)
+            gray_value = int(255 * (1 - ratio))
+            colorbar[i, :] = (gray_value, gray_value, gray_value)
+
+        elif palette in ("iron", "ironbow", "ironred"):
+            # Iron/Ironbow: black -> blue -> purple -> red -> orange -> yellow -> white
+            if ratio < 0.15:
+                # Black to blue
+                t = ratio / 0.15
+                colorbar[i, :] = (int(128 * t), 0, 0)  # BGR
+            elif ratio < 0.30:
+                # Blue to purple
+                t = (ratio - 0.15) / 0.15
+                colorbar[i, :] = (128 + int(50 * t), 0, int(80 * t))
+            elif ratio < 0.50:
+                # Purple to red
+                t = (ratio - 0.30) / 0.20
+                colorbar[i, :] = (int(178 * (1 - t)), 0, int(80 + 175 * t))
+            elif ratio < 0.70:
+                # Red to orange
+                t = (ratio - 0.50) / 0.20
+                colorbar[i, :] = (0, int(100 * t), 255)
+            elif ratio < 0.85:
+                # Orange to yellow
+                t = (ratio - 0.70) / 0.15
+                colorbar[i, :] = (0, int(100 + 155 * t), 255)
+            else:
+                # Yellow to white
+                t = (ratio - 0.85) / 0.15
+                colorbar[i, :] = (int(255 * t), 255, 255)
+
+        elif palette == "rainbow":
+            # Rainbow: blue -> cyan -> green -> yellow -> red
+            if ratio < 0.25:
+                t = ratio / 0.25
+                colorbar[i, :] = (255, int(255 * t), 0)  # Blue to cyan
+            elif ratio < 0.50:
+                t = (ratio - 0.25) / 0.25
+                colorbar[i, :] = (int(255 * (1 - t)), 255, 0)  # Cyan to green
+            elif ratio < 0.75:
+                t = (ratio - 0.50) / 0.25
+                colorbar[i, :] = (0, 255, int(255 * t))  # Green to yellow
+            else:
+                t = (ratio - 0.75) / 0.25
+                colorbar[i, :] = (0, int(255 * (1 - t)), 255)  # Yellow to red
+
+        elif palette == "fulgurite":
+            # Fulgurite: dark blue -> light blue -> white -> yellow -> orange
+            if ratio < 0.25:
+                t = ratio / 0.25
+                colorbar[i, :] = (int(100 + 100 * t), int(50 * t), int(50 * t))
+            elif ratio < 0.50:
+                t = (ratio - 0.25) / 0.25
+                colorbar[i, :] = (int(200 + 55 * t), int(50 + 150 * t), int(50 + 150 * t))
+            elif ratio < 0.75:
+                t = (ratio - 0.50) / 0.25
+                colorbar[i, :] = (int(255 * (1 - t * 0.5)), 255, int(200 + 55 * t))
+            else:
+                t = (ratio - 0.75) / 0.25
+                colorbar[i, :] = (0, int(255 * (1 - t * 0.5)), 255)
+
+        elif palette == "medical":
+            # Medical: blue to red through green/yellow
+            if ratio < 0.33:
+                t = ratio / 0.33
+                colorbar[i, :] = (255, int(255 * t), 0)  # Blue to cyan
+            elif ratio < 0.66:
+                t = (ratio - 0.33) / 0.33
+                colorbar[i, :] = (int(255 * (1 - t)), 255, int(255 * t))  # Cyan through green to yellow
+            else:
+                t = (ratio - 0.66) / 0.34
+                colorbar[i, :] = (0, int(255 * (1 - t)), 255)  # Yellow to red
+
+        else:
+            # Unknown palette - default to whitehot
+            gray_value = int(255 * ratio)
+            colorbar[i, :] = (gray_value, gray_value, gray_value)
+
+    return colorbar
 
 
 @dataclass
@@ -436,17 +578,15 @@ class ThermalAnnotator:
                     2,
                 )
 
-            # Add colorbar on the right
+            # Add colorbar on the right - detect palette from image
             colorbar_x = img_area_width + 30
             colorbar_width = 30
             colorbar_height = img_area_height
 
-            # Create temperature colorbar (whitehot grayscale - matches DJI thermal display)
-            colorbar = np.zeros((colorbar_height, colorbar_width, 3), dtype=np.uint8)
-            for i in range(colorbar_height):
-                ratio = 1.0 - (i / colorbar_height)
-                gray_value = int(255 * ratio)
-                colorbar[i, :] = (gray_value, gray_value, gray_value)
+            # Detect palette from raw image and create matching colorbar
+            palette = detect_thermal_palette(raw_image_path)
+            colorbar = create_colorbar(colorbar_height, colorbar_width, palette)
+            logger.debug(f"Created colorbar for palette: {palette}")
 
             canvas[10 : 10 + colorbar_height, colorbar_x : colorbar_x + colorbar_width] = colorbar
 
@@ -664,16 +804,14 @@ class ThermalAnnotator:
                 cv2.circle(canvas, (cold_canvas_x, cold_canvas_y), marker_size, (255, 128, 0), 2)
                 cv2.drawMarker(canvas, (cold_canvas_x, cold_canvas_y), (255, 128, 0), cv2.MARKER_CROSS, marker_size - 2, 2)
 
-            # Add colorbar on the right
+            # Add colorbar on the right - detect palette from image
             colorbar_x = img_area_width + 30
             colorbar_width = 30
             colorbar_height = img_area_height
 
-            colorbar = np.zeros((colorbar_height, colorbar_width, 3), dtype=np.uint8)
-            for i in range(colorbar_height):
-                ratio = 1.0 - (i / colorbar_height)
-                gray_value = int(255 * ratio)
-                colorbar[i, :] = (gray_value, gray_value, gray_value)
+            # Detect palette from raw image and create matching colorbar
+            palette = detect_thermal_palette(raw_image_path)
+            colorbar = create_colorbar(colorbar_height, colorbar_width, palette)
 
             canvas[10 : 10 + colorbar_height, colorbar_x : colorbar_x + colorbar_width] = colorbar
             cv2.rectangle(canvas, (colorbar_x, 10), (colorbar_x + colorbar_width, 10 + colorbar_height), (0, 0, 0), 1)

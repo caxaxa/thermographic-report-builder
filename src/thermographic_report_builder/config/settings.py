@@ -49,10 +49,10 @@ class Settings(BaseSettings):
     # ===== Report Configuration =====
     report_language: str = "pt-BR"
     company_name: str = "Aisol"
-    client_name: str = "Anonimizado"
-    engineer_name: str = "Anonimizado"
-    crea_number: str = "12345678"
-    location: str = "Campo Grande, MS. Brasil"
+    client_name: str = ""  # Will be set from user email
+    engineer_name: str = "Automático"
+    crea_number: str = ""  # Left blank for automated reports
+    location: str = ""  # Will be derived from orthophoto GPS coordinates
     address: str = "Rua Manoel Inácio de Souza, n. 24, C.E.P : 79.020-220"
 
     # ===== PDF Generation =====

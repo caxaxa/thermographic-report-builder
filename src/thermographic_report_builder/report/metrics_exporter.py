@@ -224,6 +224,7 @@ def export_panel_grid_json(
     ortho_width: int,
     ortho_height: int,
     ortho_scale_factor: float = 0.25,
+    images_dir: Optional[Path] = None,
 ) -> Path:
     """
     Export complete panel grid to JSON for interactive defect map.
@@ -232,12 +233,16 @@ def export_panel_grid_json(
     using the report's panel_id format (e.g., "3-45", "1-2B") so the
     interactive map matches exactly what appears in the PDF report.
 
+    For hotspots with thermal analysis, the annotated image (with temperature
+    markers) is used for the hover display if available.
+
     Args:
         panel_grid: Dictionary of panels from DefectMapper
         output_path: Path to save JSON file
         ortho_width: Original orthophoto width in pixels
         ortho_height: Original orthophoto height in pixels
         ortho_scale_factor: Scale factor used to create ortho.png
+        images_dir: Directory containing report images (for checking annotated versions)
 
     Returns:
         Path to saved file
@@ -282,10 +287,22 @@ def export_panel_grid_json(
                 })
 
         # Build thermal image filenames for each defect type present in this panel
-        # Naming convention: {defect_type}_({panel_id}).jpg (matches gps_matcher.py output)
+        # For hotspots: prefer zoombox image (raw with crop indicator) for hover display
+        # Fallback chain: _zoombox.jpg -> _annotated.jpg -> regular .jpg
         thermal_images = {}
         if panel.hotspots:
-            thermal_images["hotspots"] = f"hotspots_({panel.panel_id}).jpg"
+            # Check for zoombox version first (raw image with zoom area marked)
+            zoombox_filename = f"hotspots_({panel.panel_id})_zoombox.jpg"
+            annotated_filename = f"hotspots_({panel.panel_id})_annotated.jpg"
+            regular_filename = f"hotspots_({panel.panel_id}).jpg"
+            if images_dir and (images_dir / zoombox_filename).exists():
+                thermal_images["hotspots"] = zoombox_filename
+                logger.debug(f"Using zoombox thermal image for {panel.panel_id}")
+            elif images_dir and (images_dir / annotated_filename).exists():
+                thermal_images["hotspots"] = annotated_filename
+                logger.debug(f"Using annotated thermal image for {panel.panel_id}")
+            else:
+                thermal_images["hotspots"] = regular_filename
         if panel.faulty_diodes:
             thermal_images["faultydiodes"] = f"faultydiodes_({panel.panel_id}).jpg"
         if panel.offline_panels:
