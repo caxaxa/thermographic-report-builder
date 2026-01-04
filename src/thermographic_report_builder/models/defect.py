@@ -90,26 +90,40 @@ class Panel(BaseModel):
     offline_panels: list[Defect] = Field(default_factory=list)
     tracker: str = Field(default="A", description="Tracker section label (A, B, C, ...)")
     tracker_column: int = Field(default=1, ge=1, description="Row within tracker section (1-indexed)")
+    is_horizontal: bool = Field(default=False, description="If true, use row-column format instead of column-row")
+    double_suffix: str = Field(default="", description="For double trackers: 'A' for top panel, 'B' for bottom glued panel")
 
     @property
     def panel_id(self) -> str:
         """
-        Get panel identifier as 'Col-Row' or 'Col-RowTracker'.
+        Get panel identifier based on layout configuration.
 
-        Column-first numbering:
-        - Columns are numbered 1, 2, 3... from left to right
-        - Rows within each column are numbered 1, 2, 3... from top to bottom
-        - If there's a large vertical gap (tracker break), rows restart with B suffix
+        Vertical layout (default, is_horizontal=False):
+        - Column-first numbering: columns left-to-right, rows top-to-bottom within column
+        - Format: 'Col-Row' (e.g., '3-45') or 'Col-RowTracker' (e.g., '3-1B')
 
-        Format:
-        - Tracker A (default): '3-45' (column 3, row 45)
-        - Tracker B: '3-1B' (column 3, row 1 in tracker B)
-        - Tracker C: '3-2C' (column 3, row 2 in tracker C)
+        Horizontal layout (is_horizontal=True):
+        - Row-first numbering: rows top-to-bottom, columns left-to-right within row
+        - Format: 'Row-Col' (e.g., '1-3') or 'Row-ColSuffix' (e.g., '1-3A' for double tracker)
+
+        Double tracker suffix (double_suffix):
+        - 'A' = top panel of glued pair
+        - 'B' = bottom panel of glued pair
         """
-        if self.tracker == "A":
-            return f"{self.column}-{self.tracker_column}"
+        if self.is_horizontal:
+            # Horizontal layout: Row-Column format
+            base = f"{self.row}-{self.column}"
+            if self.double_suffix:
+                return f"{base}{self.double_suffix}"
+            elif self.tracker != "A":
+                return f"{base}{self.tracker}"
+            return base
         else:
-            return f"{self.column}-{self.tracker_column}{self.tracker}"
+            # Vertical layout (default): Column-Row format
+            if self.tracker == "A":
+                return f"{self.column}-{self.tracker_column}"
+            else:
+                return f"{self.column}-{self.tracker_column}{self.tracker}"
 
     @property
     def has_defects(self) -> bool:

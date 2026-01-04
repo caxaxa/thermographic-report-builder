@@ -48,20 +48,6 @@ def annotate_orthophoto(
                 thickness=3,
             )
 
-            # Add label (convert floats to ints for OpenCV)
-            label = defect.defect_type
-            text_pos = (int(bbox.left), int(bbox.top) - 5)
-            cv2.putText(
-                ortho_img,
-                label,
-                text_pos,
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 0, 0),
-                2,
-                lineType=cv2.LINE_AA,
-            )
-
     # Downscale
     downscaled = cv2.resize(
         ortho_img, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA

@@ -17,6 +17,14 @@ TRACKER_GAP_THRESHOLD = 3.0
 COLUMN_TOLERANCE = 1.0
 
 
+# Row grouping tolerance for horizontal layout: panels within this many panel heights vertically are in same row
+ROW_TOLERANCE = 1.0
+
+# Double tracker detection: if vertical gap between panels is less than this fraction of panel height,
+# they are considered "glued" (A=top, B=bottom of same tracker)
+DOUBLE_TRACKER_GAP_THRESHOLD = 0.5
+
+
 class DefectMapper:
     """Maps defects to solar panels and creates structured panel grid."""
 
@@ -25,6 +33,8 @@ class DefectMapper:
         image_width: int,
         image_height: int,
         geo_converter: PixelToLatLonConverter,
+        is_horizontal: bool = False,
+        is_double_tracker: bool = False,
     ):
         """
         Initialize defect mapper.
@@ -33,10 +43,15 @@ class DefectMapper:
             image_width: Orthophoto width in pixels
             image_height: Orthophoto height in pixels
             geo_converter: Helper to convert pixels into geodetic coordinates
+            is_horizontal: If True, use row-first numbering (Row-Column format)
+            is_double_tracker: If True, detect glued panel pairs (A=top, B=bottom)
         """
         self.img_width = image_width
         self.img_height = image_height
         self.geo_converter = geo_converter
+        self.is_horizontal = is_horizontal
+        self.is_double_tracker = is_double_tracker
+        logger.info(f"DefectMapper: is_horizontal={is_horizontal}, is_double_tracker={is_double_tracker}")
 
     def map_defects_to_panels(
         self, panel_boxes: list[BoundingBox], defect_boxes: list[BoundingBox]
@@ -76,14 +91,23 @@ class DefectMapper:
         median_width = float(np.median([p.width for p in panels_to_use])) if panels_to_use else 100.0
         median_height = float(np.median([p.height for p in panels_to_use])) if panels_to_use else 100.0
 
-        # 1. Group panels into COLUMNS (panels within 1 panel width horizontally = same column)
-        columns = self._group_into_columns(panels_to_use, median_width)
-        logger.info(f"Grouped panels into {len(columns)} columns")
-
-        # 2. Create panel grid with column-first numbering and tracker separation within columns
-        panel_grid = self._build_panel_grid_column_first(columns, median_height)
-        max_rows = max((len(c) for c in columns), default=0)
-        logger.info(f"Created panel grid: {len(columns)} columns, max {max_rows} rows per column")
+        # Choose layout strategy based on configuration
+        if self.is_horizontal:
+            # Horizontal layout: group by rows first (top to bottom), then columns (left to right)
+            logger.info("Using HORIZONTAL layout (row-first numbering)")
+            rows = self._group_into_rows(panels_to_use, median_height)
+            logger.info(f"Grouped panels into {len(rows)} rows")
+            panel_grid = self._build_panel_grid_row_first(rows, median_width)
+            max_cols = max((len(r) for r in rows), default=0)
+            logger.info(f"Created panel grid: {len(rows)} rows, max {max_cols} columns per row")
+        else:
+            # Vertical layout (default): group by columns first (left to right), then rows (top to bottom)
+            logger.info("Using VERTICAL layout (column-first numbering)")
+            columns = self._group_into_columns(panels_to_use, median_width)
+            logger.info(f"Grouped panels into {len(columns)} columns")
+            panel_grid = self._build_panel_grid_column_first(columns, median_height)
+            max_rows = max((len(c) for c in columns), default=0)
+            logger.info(f"Created panel grid: {len(columns)} columns, max {max_rows} rows per column")
 
         # Verify panel grid contains aligned panels
         if panel_grid:
@@ -246,6 +270,188 @@ class DefectMapper:
         if len(trackers_found) > 1:
             logger.info("Found %d tracker sections: %s", len(trackers_found), sorted(trackers_found))
 
+        return panel_grid
+
+    def _group_into_rows(
+        self, panels: list[BoundingBox], median_height: float
+    ) -> List[List[BoundingBox]]:
+        """
+        Group panels into rows based on vertical proximity (for horizontal layout).
+
+        Panels within ROW_TOLERANCE * median_height vertically are in the same row.
+
+        Args:
+            panels: List of panel bounding boxes
+            median_height: Median panel height for tolerance calculation
+
+        Returns:
+            List of rows, each containing panel bounding boxes sorted by X (left to right)
+        """
+        if not panels:
+            return []
+
+        # Sort by top position (Y coordinate)
+        sorted_by_y = sorted(panels, key=lambda p: p.top)
+
+        tolerance_y = median_height * ROW_TOLERANCE
+        rows: List[List[BoundingBox]] = []
+        current_row = [sorted_by_y[0]]
+        ref_y = sorted_by_y[0].top
+
+        for panel in sorted_by_y[1:]:
+            # Same row if Y positions are within tolerance
+            if abs(panel.top - ref_y) <= tolerance_y:
+                current_row.append(panel)
+            else:
+                # Start new row - sort current by X before adding
+                rows.append(sorted(current_row, key=lambda p: p.left))
+                current_row = [panel]
+                ref_y = panel.top
+
+        if current_row:
+            rows.append(sorted(current_row, key=lambda p: p.left))
+
+        logger.info(
+            "Grouped %d panels into %d rows (tolerance=%.1f px)",
+            len(panels), len(rows), tolerance_y
+        )
+        for i, row in enumerate(rows[:5]):
+            y_vals = [p.top for p in row]
+            logger.debug(
+                "Row %d: %d panels, Y range=[%.0f-%.0f]",
+                i + 1, len(row), min(y_vals), max(y_vals)
+            )
+
+        return rows
+
+    def _build_panel_grid_row_first(
+        self,
+        rows: List[List[BoundingBox]],
+        median_width: float,
+    ) -> Dict[Tuple[int, int], Panel]:
+        """
+        Create panel grid with row-first numbering (for horizontal layout).
+
+        For each row (top to bottom):
+        - Number panels 1, 2, 3... from left to right
+
+        For double tracker:
+        - Detect "glued" panel pairs (small vertical gap)
+        - Top panel gets suffix 'A', bottom panel gets suffix 'B'
+
+        Panel ID format:
+        - Single tracker: "row-col" e.g., "1-3"
+        - Double tracker: "row-colA" / "row-colB" e.g., "1-3A", "1-3B"
+
+        Args:
+            rows: List of rows, each containing panel bounding boxes sorted by X
+            median_width: Median panel width for double tracker detection
+
+        Returns:
+            Dictionary mapping (row, column) -> Panel
+        """
+        panel_grid: Dict[Tuple[int, int], Panel] = {}
+
+        if self.is_double_tracker:
+            # For double tracker, we need to pair panels and assign A/B suffixes
+            panel_grid = self._build_double_tracker_grid(rows, median_width)
+        else:
+            # Simple row-first numbering
+            for row_idx, row_panels in enumerate(rows, start=1):
+                if not row_panels:
+                    continue
+
+                for col_idx, panel_bbox in enumerate(row_panels, start=1):
+                    panel_grid[(row_idx, col_idx)] = Panel(
+                        column=col_idx,
+                        row=row_idx,
+                        bbox=panel_bbox,
+                        tracker="A",
+                        tracker_column=col_idx,
+                        is_horizontal=True,
+                    )
+
+        return panel_grid
+
+    def _build_double_tracker_grid(
+        self,
+        rows: List[List[BoundingBox]],
+        median_width: float,
+    ) -> Dict[Tuple[int, int], Panel]:
+        """
+        Build panel grid for double tracker horizontal layout.
+
+        For double trackers with horizontal layout:
+        - Rows come in pairs (top row A, bottom row B - the "glued" panels)
+        - Each pair forms one logical tracker row
+        - Panel ID format: Row-ColumnA / Row-ColumnB
+
+        Example: If we have 4 physical rows of panels (rows 1-2 are glued, rows 3-4 are glued):
+        - Physical row 1, col 3 -> 1-3A
+        - Physical row 2, col 3 -> 1-3B (glued below)
+        - Physical row 3, col 3 -> 2-3A
+        - Physical row 4, col 3 -> 2-3B (glued below)
+
+        Args:
+            rows: List of rows, each containing panel bounding boxes sorted by X
+            median_width: Median panel width for column matching
+
+        Returns:
+            Dictionary mapping (row, column) -> Panel
+        """
+        panel_grid: Dict[Tuple[int, int], Panel] = {}
+
+        # Process rows in pairs (A row, B row)
+        tracker_row = 0
+        row_idx = 0
+
+        while row_idx < len(rows):
+            row_a = rows[row_idx]
+
+            # Check if there's a B row (glued row below)
+            row_b = None
+            if row_idx + 1 < len(rows):
+                # Check if next row is "glued" (small vertical gap)
+                if row_a and rows[row_idx + 1]:
+                    first_a = row_a[0]
+                    first_b = rows[row_idx + 1][0]
+                    gap = first_b.top - (first_a.top + first_a.height)
+                    median_height = (first_a.height + first_b.height) / 2
+
+                    if gap < median_height * DOUBLE_TRACKER_GAP_THRESHOLD:
+                        row_b = rows[row_idx + 1]
+                        row_idx += 1  # Skip the B row in main loop
+
+            tracker_row += 1
+
+            # Process A row
+            for col_idx, panel_bbox in enumerate(row_a, start=1):
+                panel_grid[(tracker_row, col_idx * 2 - 1)] = Panel(
+                    column=col_idx,
+                    row=tracker_row,
+                    bbox=panel_bbox,
+                    tracker="A",
+                    tracker_column=col_idx,
+                    is_horizontal=True,
+                    double_suffix="A",
+                )
+
+            # Process B row if exists
+            if row_b:
+                for col_idx, panel_bbox in enumerate(row_b, start=1):
+                    panel_grid[(tracker_row, col_idx * 2)] = Panel(
+                        column=col_idx,
+                        row=tracker_row,
+                        bbox=panel_bbox,
+                        tracker="A",
+                        tracker_column=col_idx,
+                        is_horizontal=True,
+                        double_suffix="B",
+                    )
+
+            row_idx += 1
+
+        logger.info(f"Double tracker grid: {len(panel_grid)} panels in {tracker_row} tracker rows")
         return panel_grid
 
     def _assign_defects_to_panels(

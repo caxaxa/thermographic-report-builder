@@ -67,6 +67,28 @@ def main() -> int:
 
         labels_path = s3_client.download_defect_labels(work_dir / "defect_labels.json")
 
+        # Download crop annotation for layout configuration (optional)
+        is_horizontal = False
+        is_double_tracker = False
+        crop_annotation_path = s3_client.download_crop_annotation(work_dir / "crop_annotation.json")
+        if crop_annotation_path:
+            import json
+            try:
+                with open(crop_annotation_path, 'r') as f:
+                    crop_data = json.load(f)
+                # Check for isHorizontal first (new format), fallback to isVertical (old format)
+                # Note: Old frontend confusingly used isVertical=true to mean horizontal layout
+                # We fixed the frontend to use isHorizontal, but support both for backwards compat
+                if 'isHorizontal' in crop_data:
+                    is_horizontal = crop_data.get('isHorizontal', False)
+                elif 'isVertical' in crop_data:
+                    # Old format: isVertical=true meant horizontal layout (confusing but true)
+                    is_horizontal = crop_data.get('isVertical', False)
+                is_double_tracker = crop_data.get('isDouble', False)
+                logger.info(f"Crop annotation: isHorizontal={is_horizontal}, isDouble={is_double_tracker}")
+            except Exception as e:
+                logger.warning(f"Failed to parse crop annotation: {e}")
+
         # ===== STEP 2: Load and parse data =====
         logger.info("=" * 80)
         logger.info("STEP 2: Loading orthophoto and defect labels")
@@ -84,7 +106,11 @@ def main() -> int:
         logger.info("STEP 3: Mapping defects to panel grid")
         logger.info("=" * 80)
 
-        mapper = DefectMapper(img_w, img_h, geo_converter)
+        mapper = DefectMapper(
+            img_w, img_h, geo_converter,
+            is_horizontal=is_horizontal,
+            is_double_tracker=is_double_tracker
+        )
         panel_grid = mapper.map_defects_to_panels(
             panel_boxes=defect_labels.get_panels(), defect_boxes=defect_labels.get_defects()
         )
@@ -295,6 +321,7 @@ def main() -> int:
 
         # Export panel_grid.json for interactive defect map (with report-aligned panel IDs)
         # Pass images_dir so it can check for annotated thermal images
+        # Pass annotation_manifest so it can include temperature data
         panel_grid_json_path = export_panel_grid_json(
             panel_grid,
             work_dir / "panel_grid.json",
@@ -302,6 +329,7 @@ def main() -> int:
             ortho_height=img_h,
             ortho_scale_factor=settings.orthophoto_downscale_factor,
             images_dir=images_dir,
+            annotation_manifest=manifest,
         )
 
         # ===== STEP 10: Compile LaTeX to PDF =====

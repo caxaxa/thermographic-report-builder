@@ -544,19 +544,21 @@ class ThermalAnnotator:
             hot_canvas_x = max(10, min(10 + img_area_width - 1, hot_canvas_x))
             hot_canvas_y = max(10, min(10 + img_area_height - 1, hot_canvas_y))
 
-            marker_size = 15
+            marker_size = 20
+            outline_thickness = 5
+            marker_thickness = 4
 
             # Red circle with white outline for HOT point
-            cv2.circle(canvas, (hot_canvas_x, hot_canvas_y), marker_size + 2, (255, 255, 255), 3)
-            cv2.circle(canvas, (hot_canvas_x, hot_canvas_y), marker_size, (0, 0, 255), 2)
+            cv2.circle(canvas, (hot_canvas_x, hot_canvas_y), marker_size + 3, (255, 255, 255), outline_thickness)
+            cv2.circle(canvas, (hot_canvas_x, hot_canvas_y), marker_size, (0, 0, 255), marker_thickness)
             # Cross inside
             cv2.drawMarker(
                 canvas,
                 (hot_canvas_x, hot_canvas_y),
                 (0, 0, 255),
                 cv2.MARKER_CROSS,
-                marker_size - 2,
-                2,
+                marker_size - 4,
+                marker_thickness,
             )
 
             # --- Draw COLD marker (BLUE) ---
@@ -566,16 +568,16 @@ class ThermalAnnotator:
             # Only draw if cold point is within the cropped region
             if 10 <= cold_canvas_x <= 10 + img_area_width and 10 <= cold_canvas_y <= 10 + img_area_height:
                 # Blue circle with white outline for COLD point
-                cv2.circle(canvas, (cold_canvas_x, cold_canvas_y), marker_size + 2, (255, 255, 255), 3)
-                cv2.circle(canvas, (cold_canvas_x, cold_canvas_y), marker_size, (255, 128, 0), 2)
+                cv2.circle(canvas, (cold_canvas_x, cold_canvas_y), marker_size + 3, (255, 255, 255), outline_thickness)
+                cv2.circle(canvas, (cold_canvas_x, cold_canvas_y), marker_size, (255, 128, 0), marker_thickness)
                 # Cross inside
                 cv2.drawMarker(
                     canvas,
                     (cold_canvas_x, cold_canvas_y),
                     (255, 128, 0),
                     cv2.MARKER_CROSS,
-                    marker_size - 2,
-                    2,
+                    marker_size - 4,
+                    marker_thickness,
                 )
 
             # Add colorbar on the right - detect palette from image
@@ -790,19 +792,21 @@ class ThermalAnnotator:
             hot_canvas_x = max(10, min(10 + img_area_width - 1, hot_canvas_x))
             hot_canvas_y = max(10, min(10 + img_area_height - 1, hot_canvas_y))
 
-            marker_size = 15
-            cv2.circle(canvas, (hot_canvas_x, hot_canvas_y), marker_size + 2, (255, 255, 255), 3)
-            cv2.circle(canvas, (hot_canvas_x, hot_canvas_y), marker_size, (0, 0, 255), 2)
-            cv2.drawMarker(canvas, (hot_canvas_x, hot_canvas_y), (0, 0, 255), cv2.MARKER_CROSS, marker_size - 2, 2)
+            marker_size = 20
+            outline_thickness = 5
+            marker_thickness = 4
+            cv2.circle(canvas, (hot_canvas_x, hot_canvas_y), marker_size + 3, (255, 255, 255), outline_thickness)
+            cv2.circle(canvas, (hot_canvas_x, hot_canvas_y), marker_size, (0, 0, 255), marker_thickness)
+            cv2.drawMarker(canvas, (hot_canvas_x, hot_canvas_y), (0, 0, 255), cv2.MARKER_CROSS, marker_size - 4, marker_thickness)
 
             # --- Draw COLD marker (BLUE) ---
             cold_canvas_x = int(10 + (hot_cold.cold_x - x1) * scale_to_canvas_x)
             cold_canvas_y = int(10 + (hot_cold.cold_y - y1) * scale_to_canvas_y)
 
             if 10 <= cold_canvas_x <= 10 + img_area_width and 10 <= cold_canvas_y <= 10 + img_area_height:
-                cv2.circle(canvas, (cold_canvas_x, cold_canvas_y), marker_size + 2, (255, 255, 255), 3)
-                cv2.circle(canvas, (cold_canvas_x, cold_canvas_y), marker_size, (255, 128, 0), 2)
-                cv2.drawMarker(canvas, (cold_canvas_x, cold_canvas_y), (255, 128, 0), cv2.MARKER_CROSS, marker_size - 2, 2)
+                cv2.circle(canvas, (cold_canvas_x, cold_canvas_y), marker_size + 3, (255, 255, 255), outline_thickness)
+                cv2.circle(canvas, (cold_canvas_x, cold_canvas_y), marker_size, (255, 128, 0), marker_thickness)
+                cv2.drawMarker(canvas, (cold_canvas_x, cold_canvas_y), (255, 128, 0), cv2.MARKER_CROSS, marker_size - 4, marker_thickness)
 
             # Add colorbar on the right - detect palette from image
             colorbar_x = img_area_width + 30

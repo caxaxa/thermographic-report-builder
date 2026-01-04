@@ -3,11 +3,12 @@
 import csv
 import json
 from pathlib import Path
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 from datetime import datetime
 
 from ..models.defect import Panel
 from ..models.report import DefectMetrics
+from ..models.annotation_manifest import AnnotationManifest
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -225,6 +226,7 @@ def export_panel_grid_json(
     ortho_height: int,
     ortho_scale_factor: float = 0.25,
     images_dir: Optional[Path] = None,
+    annotation_manifest: Optional[AnnotationManifest] = None,
 ) -> Path:
     """
     Export complete panel grid to JSON for interactive defect map.
@@ -243,11 +245,26 @@ def export_panel_grid_json(
         ortho_height: Original orthophoto height in pixels
         ortho_scale_factor: Scale factor used to create ortho.png
         images_dir: Directory containing report images (for checking annotated versions)
+        annotation_manifest: Optional annotation manifest with temperature data
 
     Returns:
         Path to saved file
     """
     logger.info(f"Exporting panel grid to JSON: {output_path}")
+
+    # Build index of temperature data from annotation manifest
+    # Key: (panel_id, defect_type, defect_index) -> annotation entry
+    temp_index: Dict[str, dict] = {}
+    if annotation_manifest:
+        for entry in annotation_manifest.annotations:
+            # Key by defect_id for exact lookup
+            temp_index[entry.defect_id] = {
+                "hot_temp": entry.hot_point.temp,
+                "cold_temp": entry.cold_point.temp,
+                "delta_t": entry.delta_t,
+                "severity": entry.severity,
+            }
+        logger.info(f"Built temperature index with {len(temp_index)} entries")
 
     # Build list of panels with defects (for the interactive map)
     panels_with_defects = []
@@ -268,8 +285,16 @@ def export_panel_grid_json(
             ("faulty_diodes", "faultydiodes"),
             ("offline_panels", "offlinepanels"),
         ]:
-            for defect in getattr(panel, defect_type_attr, []):
-                defects.append({
+            defect_list = getattr(panel, defect_type_attr, [])
+            for defect_idx, defect in enumerate(defect_list, 1):
+                # Build defect_id to look up temperature data
+                # Format: hotspots_(panel_id)_defeito{index} or hotspots_(panel_id) for single
+                if len(defect_list) > 1:
+                    defect_id = f"{defect_class}_({panel.panel_id})_defeito{defect_idx}"
+                else:
+                    defect_id = f"{defect_class}_({panel.panel_id})_defeito1"
+
+                defect_entry = {
                     "defect_class": defect_class,
                     "display_class": DEFECT_DISPLAY_NAMES.get(defect_class, defect_class),
                     "bbox": {
@@ -284,7 +309,17 @@ def export_panel_grid_json(
                         "width": round(defect.bbox.width * ortho_scale_factor, 1),
                         "height": round(defect.bbox.height * ortho_scale_factor, 1),
                     },
-                })
+                }
+
+                # Add temperature data if available from annotation manifest
+                if defect_id in temp_index:
+                    temp_data = temp_index[defect_id]
+                    defect_entry["hot_temp"] = temp_data["hot_temp"]
+                    defect_entry["cold_temp"] = temp_data["cold_temp"]
+                    defect_entry["delta_t"] = round(temp_data["delta_t"], 1)
+                    defect_entry["severity"] = temp_data["severity"]
+
+                defects.append(defect_entry)
 
         # Build thermal image filenames for each defect type present in this panel
         # For hotspots: prefer zoombox image (raw with crop indicator) for hover display

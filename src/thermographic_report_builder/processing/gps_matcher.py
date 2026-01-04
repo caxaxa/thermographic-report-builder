@@ -631,7 +631,8 @@ class GPSMatcher:
 
             # Draw blue rectangle showing zoom area
             # Use thick stroke for visibility
-            stroke_thickness = 4
+            stroke_thickness = 6
+            corner_thickness = 8
             cv2.rectangle(
                 img,
                 (x1, y1),
@@ -641,19 +642,19 @@ class GPSMatcher:
             )
 
             # Add corner markers for extra visibility
-            corner_len = 20
+            corner_len = 30
             # Top-left corner
-            cv2.line(img, (x1, y1), (x1 + corner_len, y1), (255, 128, 0), stroke_thickness + 2)
-            cv2.line(img, (x1, y1), (x1, y1 + corner_len), (255, 128, 0), stroke_thickness + 2)
+            cv2.line(img, (x1, y1), (x1 + corner_len, y1), (255, 128, 0), corner_thickness)
+            cv2.line(img, (x1, y1), (x1, y1 + corner_len), (255, 128, 0), corner_thickness)
             # Top-right corner
-            cv2.line(img, (x2, y1), (x2 - corner_len, y1), (255, 128, 0), stroke_thickness + 2)
-            cv2.line(img, (x2, y1), (x2, y1 + corner_len), (255, 128, 0), stroke_thickness + 2)
+            cv2.line(img, (x2, y1), (x2 - corner_len, y1), (255, 128, 0), corner_thickness)
+            cv2.line(img, (x2, y1), (x2, y1 + corner_len), (255, 128, 0), corner_thickness)
             # Bottom-left corner
-            cv2.line(img, (x1, y2), (x1 + corner_len, y2), (255, 128, 0), stroke_thickness + 2)
-            cv2.line(img, (x1, y2), (x1, y2 - corner_len), (255, 128, 0), stroke_thickness + 2)
+            cv2.line(img, (x1, y2), (x1 + corner_len, y2), (255, 128, 0), corner_thickness)
+            cv2.line(img, (x1, y2), (x1, y2 - corner_len), (255, 128, 0), corner_thickness)
             # Bottom-right corner
-            cv2.line(img, (x2, y2), (x2 - corner_len, y2), (255, 128, 0), stroke_thickness + 2)
-            cv2.line(img, (x2, y2), (x2, y2 - corner_len), (255, 128, 0), stroke_thickness + 2)
+            cv2.line(img, (x2, y2), (x2 - corner_len, y2), (255, 128, 0), corner_thickness)
+            cv2.line(img, (x2, y2), (x2, y2 - corner_len), (255, 128, 0), corner_thickness)
 
             # Resize to half size (same as main drone image)
             img_resized = cv2.resize(img, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
@@ -910,6 +911,28 @@ class GPSMatcher:
                     )
                     entry.delta_t = annotated.hot_cold.hot_temp - annotated.hot_cold.cold_temp
                     entry.severity = annotated.severity
+
+                    # Also regenerate the zoombox image with updated hot point
+                    # Convert thermal coords to visual coords for zoombox
+                    from ..utils.thermal_alignment import thermal_to_visual
+                    visual_x, visual_y = thermal_to_visual(hot_point.x, hot_point.y)
+
+                    # Get flight direction for this image
+                    flight_dir = self.orientation_map.get(entry.raw_image_name)
+
+                    # Create zoombox with updated hot point position
+                    defect_type_str = entry.defect_type.replace("_", "")
+                    self._save_annotated_raw_image(
+                        raw_image_path=raw_image_path,
+                        hot_point_x=int(visual_x),
+                        hot_point_y=int(visual_y),
+                        zoom_size=200,  # Same as thermal_annotator default
+                        output_dir=output_dir,
+                        defect_type_str=defect_type_str,
+                        panel_id=entry.panel_id,
+                        flight_dir=flight_dir,
+                    )
+                    logger.info(f"Re-rendered zoombox with override: {defect_type_str}_({entry.panel_id})_zoombox.jpg")
                 else:
                     logger.warning(f"Failed to re-render {entry.defect_id}")
             except Exception as e:

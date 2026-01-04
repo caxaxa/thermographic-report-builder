@@ -455,3 +455,40 @@ class S3Client:
             else:
                 logger.warning(f"Failed to download annotation overrides: {e}")
                 return False
+
+    def download_crop_annotation(self, local_path: Path) -> Path | None:
+        """
+        Download crop_annotation.json from S3.
+
+        This file contains crop region and layout configuration flags set by the
+        admin annotation tool:
+        - polygon: Crop boundary points
+        - rotationLine: Alignment reference line
+        - isDouble: Whether panels are double trackers
+        - isHorizontal: Whether to use row-first numbering (horizontal layout)
+        - is2H: Whether panels are 2H configuration
+
+        Args:
+            local_path: Local path to save the file
+
+        Returns:
+            Path to downloaded file, or None if not available
+        """
+        key = f"{settings.user_id}/projects/{settings.project_id}/groundtruth/crop_annotation.json"
+        bucket = settings.groundtruth_bucket
+
+        logger.info(f"Attempting to download crop annotation from s3://{bucket}/{key}")
+
+        try:
+            self.s3.download_file(Bucket=bucket, Key=key, Filename=str(local_path))
+            size_bytes = local_path.stat().st_size
+            logger.info(f"Downloaded crop annotation: {size_bytes} bytes")
+            return local_path
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchKey', '404'):
+                logger.info("Crop annotation not found - using default layout (vertical, single tracker)")
+                return None
+            else:
+                logger.warning(f"Failed to download crop annotation: {e}")
+                return None
