@@ -18,6 +18,132 @@ from .utils.thermal_alignment import log_alignment_config
 logger = get_logger(__name__)
 
 
+def _compile_only_mode(work_dir: Path, images_dir: Path, start_time: float) -> int:
+    """
+    Run in compile-only mode: download tex_bundle and recompile PDF.
+
+    This mode is used when the user has manually edited the TeX file and wants
+    to regenerate the PDF without re-running the full 11-step pipeline.
+
+    Args:
+        work_dir: Working directory for temporary files
+        images_dir: Directory for report images
+        start_time: Pipeline start time for duration logging
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    import subprocess
+
+    s3_client = S3Client()
+
+    # Download tex_bundle from S3
+    logger.info("Downloading TeX bundle from S3...")
+    if not s3_client.download_tex_bundle(work_dir):
+        logger.error("Failed to download TeX bundle - cannot recompile")
+        return 1
+
+    tex_path = work_dir / "report.tex"
+    if not tex_path.exists():
+        logger.error(f"report.tex not found in downloaded bundle at {tex_path}")
+        return 1
+
+    logger.info(f"Found report.tex ({tex_path.stat().st_size / 1024:.1f} KB)")
+
+    # Count images
+    if images_dir.exists():
+        image_count = len(list(images_dir.iterdir()))
+        logger.info(f"Found {image_count} images in bundle")
+
+    # Compile PDF (same logic as main pipeline STEP 10)
+    logger.info("=" * 80)
+    logger.info("Compiling LaTeX to PDF")
+    logger.info("=" * 80)
+
+    pdf_full_path = work_dir / "report.pdf"
+    try:
+        # First pass
+        result = subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "-output-directory", str(work_dir), str(tex_path)],
+            cwd=work_dir,
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        if result.returncode != 0:
+            logger.warning(f"First pdflatex pass had warnings (exit code {result.returncode})")
+            if result.stdout:
+                logger.error(f"pdflatex stdout (last 50 lines): {chr(10).join(result.stdout.splitlines()[-50:])}")
+
+        # Second pass (for cross-references)
+        result = subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "-output-directory", str(work_dir), str(tex_path)],
+            cwd=work_dir,
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        if result.returncode != 0:
+            logger.warning(f"Second pdflatex pass had warnings (exit code {result.returncode})")
+
+        if pdf_full_path.exists():
+            pdf_size_mb = pdf_full_path.stat().st_size / 1024 / 1024
+            logger.info(f"Generated full-resolution PDF: {pdf_size_mb:.1f} MB")
+        else:
+            logger.error("PDF generation failed - output file not found")
+            return 1
+
+    except subprocess.TimeoutExpired:
+        logger.error("PDF compilation timed out after 5 minutes")
+        return 1
+    except Exception as e:
+        logger.error(f"PDF compilation failed: {e}")
+        return 1
+
+    # Generate low-res PDF using Ghostscript
+    pdf_lowres_path = work_dir / "report-lowres.pdf"
+    try:
+        result = subprocess.run([
+            "gs", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.4",
+            "-dPDFSETTINGS=/ebook", "-dNOPAUSE", "-dQUIET", "-dBATCH",
+            f"-sOutputFile={pdf_lowres_path}", str(pdf_full_path)
+        ], capture_output=True, text=True, timeout=120)
+
+        if pdf_lowres_path.exists():
+            lowres_size_mb = pdf_lowres_path.stat().st_size / 1024 / 1024
+            logger.info(f"Generated low-res PDF: {lowres_size_mb:.1f} MB")
+        else:
+            logger.warning("Low-res PDF generation failed, will upload full PDF only")
+            pdf_lowres_path = None
+    except Exception as e:
+        logger.warning(f"Low-res PDF generation failed: {e}")
+        pdf_lowres_path = None
+
+    # Upload PDFs to S3
+    logger.info("=" * 80)
+    logger.info("Uploading recompiled PDFs to S3")
+    logger.info("=" * 80)
+
+    pdf_full_s3 = s3_client.upload_report(pdf_full_path, "report-full.pdf")
+    if pdf_lowres_path and pdf_lowres_path.exists():
+        pdf_lowres_s3 = s3_client.upload_report(pdf_lowres_path, "report-lowres.pdf")
+    else:
+        pdf_lowres_s3 = pdf_full_s3
+
+    # Delete the .edited marker since we've successfully recompiled
+    s3_client.delete_tex_edited_marker()
+
+    # Success!
+    duration = time.time() - start_time
+    logger.info("=" * 80)
+    logger.info(f"TeX recompilation completed successfully in {duration:.1f}s")
+    logger.info(f"Full PDF: {pdf_full_s3}")
+    logger.info(f"Low-res PDF: {pdf_lowres_s3}")
+    logger.info("=" * 80)
+
+    return 0
+
+
 def main() -> int:
     """
     Main entrypoint for AWS Batch job.
@@ -42,6 +168,15 @@ def main() -> int:
         raw_images_dir = work_dir / "raw_images"
         images_dir.mkdir(exist_ok=True)
         raw_images_dir.mkdir(exist_ok=True)
+
+        # ===== COMPILE_ONLY MODE =====
+        # Skip full pipeline and only recompile existing TeX bundle
+        if settings.compile_only:
+            logger.info("=" * 80)
+            logger.info("COMPILE_ONLY MODE: Recompiling existing TeX bundle")
+            logger.info("=" * 80)
+            exit_code = _compile_only_mode(work_dir, images_dir, start_time)
+            return exit_code
 
         # Copy static assets (logo) to images directory
         import shutil

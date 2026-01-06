@@ -85,6 +85,12 @@ class Settings(BaseSettings):
     # ===== Working Directory =====
     work_dir: Path = Path("/tmp/report_work")
 
+    # ===== Compile-Only Mode =====
+    # When True, skip report generation and only recompile existing tex_bundle
+    # Used when user has edited the TeX file and wants to regenerate PDF without
+    # re-running the full pipeline
+    compile_only: bool = False
+
     def __init__(self, **kwargs):  # type: ignore
         # Handle backward compatibility with old environment variable names
         # Old: PROJECT_ID, ORG_ID -> New: SOLAR_PROJECT_ID, SOLAR_USER_ID

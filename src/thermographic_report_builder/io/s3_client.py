@@ -492,3 +492,96 @@ class S3Client:
             else:
                 logger.warning(f"Failed to download crop annotation: {e}")
                 return None
+
+    def download_tex_bundle(self, work_dir: Path) -> bool:
+        """
+        Download the LaTeX bundle from S3 for recompilation.
+
+        Downloads the tex_bundle/ directory contents (report.tex + report_images/)
+        that was previously uploaded during report generation. This enables
+        recompiling the report after manual TeX edits.
+
+        Args:
+            work_dir: Local directory to save bundle files
+
+        Returns:
+            True if bundle was found and downloaded, False otherwise
+        """
+        base_prefix = f"{settings.user_id}/projects/{settings.project_id}/tex_bundle/"
+        bucket = settings.reports_bucket
+
+        logger.info(f"Downloading TeX bundle from s3://{bucket}/{base_prefix}")
+
+        try:
+            # Ensure work directory exists
+            work_dir.mkdir(exist_ok=True, parents=True)
+            images_dir = work_dir / "report_images"
+            images_dir.mkdir(exist_ok=True)
+
+            # List all files in the tex_bundle directory
+            response = self.s3.list_objects_v2(Bucket=bucket, Prefix=base_prefix)
+
+            if 'Contents' not in response:
+                logger.warning(f"No TeX bundle found at s3://{bucket}/{base_prefix}")
+                return False
+
+            file_count = 0
+            for obj in response['Contents']:
+                s3_key = obj['Key']
+
+                # Skip the directory itself and the .edited marker
+                if s3_key.endswith('/') or s3_key.endswith('.edited'):
+                    continue
+
+                # Get filename relative to prefix
+                rel_path = s3_key.replace(base_prefix, '')
+
+                # Skip if empty rel_path
+                if not rel_path:
+                    continue
+
+                # Determine local path
+                if rel_path.startswith('report_images/'):
+                    local_path = work_dir / rel_path
+                else:
+                    local_path = work_dir / rel_path
+
+                # Ensure parent directory exists
+                local_path.parent.mkdir(exist_ok=True, parents=True)
+
+                # Download file
+                logger.debug(f"Downloading {s3_key} to {local_path}")
+                self.s3.download_file(bucket, s3_key, str(local_path))
+                file_count += 1
+
+            logger.info(f"Downloaded {file_count} files from TeX bundle")
+            return file_count > 0
+
+        except ClientError as e:
+            logger.error(f"Failed to download TeX bundle: {e}")
+            return False
+
+    def delete_tex_edited_marker(self) -> bool:
+        """
+        Delete the .edited marker file from tex_bundle after recompilation.
+
+        This marker indicates the TeX was manually edited. Deleting it after
+        successful recompilation clears the "edited" state.
+
+        Returns:
+            True if marker was deleted or didn't exist, False on error
+        """
+        key = f"{settings.user_id}/projects/{settings.project_id}/tex_bundle/.edited"
+        bucket = settings.reports_bucket
+
+        try:
+            self.s3.delete_object(Bucket=bucket, Key=key)
+            logger.info(f"Deleted TeX edit marker: s3://{bucket}/{key}")
+            return True
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchKey', '404'):
+                logger.debug("TeX edit marker didn't exist")
+                return True
+            logger.warning(f"Failed to delete TeX edit marker: {e}")
+            return False

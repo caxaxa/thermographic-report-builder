@@ -723,9 +723,26 @@ class ThermalAnnotator:
             hot_tx, hot_ty = clamp_thermal_coords(hot_point.x, hot_point.y)
             cold_tx, cold_ty = clamp_thermal_coords(cold_point.x, cold_point.y)
 
-            # Get temperatures at the specified thermal coordinates
-            hot_temp = float(temp_array[hot_ty, hot_tx])
-            cold_temp = float(temp_array[cold_ty, cold_tx])
+            # Get temperatures using 5x5 area around the clicked point
+            # Hot point: take maximum temperature in 5x5 area
+            # Cold point: take minimum temperature in 5x5 area
+            height, width = temp_array.shape
+
+            # Extract 5x5 region around hot point and find max
+            hot_y1 = max(0, hot_ty - 2)
+            hot_y2 = min(height, hot_ty + 3)
+            hot_x1 = max(0, hot_tx - 2)
+            hot_x2 = min(width, hot_tx + 3)
+            hot_region = temp_array[hot_y1:hot_y2, hot_x1:hot_x2]
+            hot_temp = float(np.max(hot_region))
+
+            # Extract 5x5 region around cold point and find min
+            cold_y1 = max(0, cold_ty - 2)
+            cold_y2 = min(height, cold_ty + 3)
+            cold_x1 = max(0, cold_tx - 2)
+            cold_x2 = min(width, cold_tx + 3)
+            cold_region = temp_array[cold_y1:cold_y2, cold_x1:cold_x2]
+            cold_temp = float(np.min(cold_region))
             delta_t = hot_temp - cold_temp
 
             # Convert thermal coordinates to visual coordinates for drawing
