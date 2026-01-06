@@ -10,15 +10,11 @@ Supports two matching strategies:
 """
 
 import cv2
-import re
 import numpy as np
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-
-# Pattern to match UUID prefix in uploaded filenames (e.g., "01KE5WBPHE280VNG9DJF0B7W1H_DJI_...")
-UUID_PREFIX_PATTERN = re.compile(r'^[A-Z0-9]{26}_(.+)$')
 
 from ..models.defect import Panel
 from ..models.annotation_manifest import (
@@ -511,12 +507,9 @@ class GPSMatcher:
                 best_temp_delta = -999
 
                 for match in all_matches:  # Check ALL candidates that can see this point
-                    # Find actual file path (handles UUID prefix mismatch)
-                    image_path = self._find_local_path_for_reconstruction_name(
-                        match.image_name, temp_dir
-                    )
+                    image_path = temp_dir / match.image_name
 
-                    if image_path is None:
+                    if not image_path.exists():
                         continue
 
                     try:
@@ -550,28 +543,23 @@ class GPSMatcher:
                 )
 
                 if best_match and best_temp_delta > 0:
-                    image_path = self._find_local_path_for_reconstruction_name(
-                        best_match.image_name, temp_dir
+                    image_path = temp_dir / best_match.image_name
+                    logger.info(
+                        f"Selected {best_match.image_name} with temp delta +{best_temp_delta:.1f}°C"
                     )
-                    if image_path:
-                        logger.info(
-                            f"Selected {best_match.image_name} with temp delta +{best_temp_delta:.1f}°C"
-                        )
-                        return DefectMatch(
-                            image_name=best_match.image_name,
-                            image_path=image_path,
-                            method="reprojection",
-                            pixel_x=best_match.pixel_x,
-                            pixel_y=best_match.pixel_y,
-                        )
+                    return DefectMatch(
+                        image_name=best_match.image_name,
+                        image_path=image_path,
+                        method="reprojection",
+                        pixel_x=best_match.pixel_x,
+                        pixel_y=best_match.pixel_y,
+                    )
 
             # Fallback to most central match if temperature scoring fails
             if all_matches:
                 for match in all_matches:
-                    image_path = self._find_local_path_for_reconstruction_name(
-                        match.image_name, temp_dir
-                    )
-                    if image_path:
+                    image_path = temp_dir / match.image_name
+                    if image_path.exists():
                         return DefectMatch(
                             image_name=match.image_name,
                             image_path=image_path,
@@ -701,37 +689,6 @@ class GPSMatcher:
                 logger.info(f"Indexed {idx}/{len(raw_image_keys)} images ({len(self.image_cache)} with GPS)")
 
         logger.info(f"Indexed {len(self.image_cache)} images with GPS data")
-
-    def _find_local_path_for_reconstruction_name(
-        self, reconstruction_name: str, temp_dir: Path
-    ) -> Optional[Path]:
-        """
-        Find the actual local file path for a reconstruction.json image name.
-
-        Reconstruction.json uses original DJI filenames (e.g., "DJI_xxx.JPG"),
-        but uploaded files may have UUID prefixes (e.g., "01KE5WBPHE_DJI_xxx.JPG").
-
-        Args:
-            reconstruction_name: Image name from reconstruction.json (e.g., "DJI_xxx.JPG")
-            temp_dir: Directory containing downloaded raw images
-
-        Returns:
-            Path to the actual file, or None if not found
-        """
-        # First try exact match
-        exact_path = temp_dir / reconstruction_name
-        if exact_path.exists():
-            return exact_path
-
-        # Search for file with UUID prefix that ends with the reconstruction name
-        for local_file in temp_dir.iterdir():
-            if local_file.is_file():
-                # Check if filename ends with the reconstruction name (after UUID prefix)
-                match = UUID_PREFIX_PATTERN.match(local_file.name)
-                if match and match.group(1) == reconstruction_name:
-                    return local_file
-
-        return None
 
     def _find_closest_image(self, target_lat: float, target_lon: float) -> dict | None:
         """

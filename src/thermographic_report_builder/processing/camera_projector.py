@@ -9,7 +9,6 @@ at each orthophoto pixel - the same elevation ODM used when creating the orthoph
 """
 
 import json
-import re
 import numpy as np
 import rasterio
 from dataclasses import dataclass
@@ -22,9 +21,6 @@ from ..utils.logger import get_logger
 from ..utils.geospatial import PixelToLatLonConverter
 
 logger = get_logger(__name__)
-
-# Pattern to match UUID prefix added during upload (e.g., "01KE5WBPHE280VNG9DJF0B7W1H_DJI_...")
-UUID_PREFIX_PATTERN = re.compile(r'^[A-Z0-9]{26}_(.+)$')
 
 
 @dataclass
@@ -439,16 +435,6 @@ class CameraProjector:
 
         # Get shot data for this image
         shot = self.shots.get(image_name)
-
-        # If not found, try stripping UUID prefix (uploads have UUID_DJI_..., reconstruction has DJI_...)
-        if shot is None:
-            match = UUID_PREFIX_PATTERN.match(image_name)
-            if match:
-                stripped_name = match.group(1)
-                shot = self.shots.get(stripped_name)
-                if shot:
-                    logger.debug(f"Found {stripped_name} after stripping UUID prefix from {image_name}")
-
         if shot is None:
             logger.debug(f"Image {image_name} not found in reconstruction")
             return None
