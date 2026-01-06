@@ -9,6 +9,7 @@ at each orthophoto pixel - the same elevation ODM used when creating the orthoph
 """
 
 import json
+import re
 import numpy as np
 import rasterio
 from dataclasses import dataclass
@@ -21,6 +22,9 @@ from ..utils.logger import get_logger
 from ..utils.geospatial import PixelToLatLonConverter
 
 logger = get_logger(__name__)
+
+# Pattern to match UUID prefix added during upload (e.g., "01KE5WBPHE280VNG9DJF0B7W1H_DJI_...")
+UUID_PREFIX_PATTERN = re.compile(r'^[A-Z0-9]{26}_(.+)$')
 
 
 @dataclass
@@ -136,13 +140,14 @@ class CameraProjector:
 
         # Estimate ground elevation from reconstruction 3D points
         self._ground_elevation = 0.0
+        self._dsm_to_enu_offset = 0.0  # Offset to convert DSM absolute elevation to local ENU Z
         points = reconstruction.get("points", {})
         if points:
             # Get median Z coordinate of 3D points as ground elevation estimate
             z_coords = [p.get("coordinates", [0, 0, 0])[2] for p in points.values() if "coordinates" in p]
             if z_coords:
                 self._ground_elevation = float(np.median(z_coords))
-                logger.info(f"Estimated ground elevation: {self._ground_elevation:.1f}m")
+                logger.info(f"Estimated ground elevation from reconstruction: {self._ground_elevation:.1f}m (local ENU)")
 
         self.available = len(self.shots) > 0
 
@@ -243,13 +248,35 @@ class CameraProjector:
             z_bot = z10 * (1 - dx) + z11 * dx
             elevation_utm = z_top * (1 - dy) + z_bot * dy
 
-        # Convert UTM elevation to local ENU Z
+        # Convert UTM/absolute elevation to local ENU Z
         # OpenSfM reference_lla includes altitude, but local Z is relative to that
-        # The DSM values are in the same vertical datum as the orthophoto (UTM)
-        # We need to convert to local ENU: Z_enu = Z_utm - reference_altitude
+        # The DSM values are in the same vertical datum as the orthophoto (typically ellipsoidal or geoid height)
+        #
+        # IMPORTANT: When reference_lla.altitude = 0 (common in ODM output), we need to
+        # calibrate the DSM-to-ENU offset using known ground points from the reconstruction.
+        # Otherwise, DSM absolute elevation (~850m) would be used as local Z, causing
+        # massive projection errors.
+
         if self.reference_lla:
             ref_alt = self.reference_lla.get("altitude", 0)
-            elevation_enu = elevation_utm - ref_alt
+
+            if ref_alt == 0 and self._dsm_to_enu_offset == 0.0 and self._ground_elevation != 0.0:
+                # Reference altitude is 0 but we have ground elevation from 3D points
+                # The DSM elevation at ground level should map to _ground_elevation in local ENU
+                # So offset = DSM_value - ground_elevation_enu
+                # We compute this once using the current DSM sample
+                self._dsm_to_enu_offset = elevation_utm - self._ground_elevation
+                logger.info(
+                    f"Calibrated DSM-to-ENU offset: {self._dsm_to_enu_offset:.1f}m "
+                    f"(DSM={elevation_utm:.1f}m -> ENU ground={self._ground_elevation:.1f}m)"
+                )
+
+            if ref_alt != 0:
+                # Normal case: reference altitude is set
+                elevation_enu = elevation_utm - ref_alt
+            else:
+                # Reference altitude is 0: use calibrated offset
+                elevation_enu = elevation_utm - self._dsm_to_enu_offset
         else:
             elevation_enu = elevation_utm
 
@@ -260,7 +287,7 @@ class CameraProjector:
         ortho_x: float,
         ortho_y: float,
         elevation: Optional[float] = None,
-        max_gps_distance: float = 15.0,
+        max_gps_distance: Optional[float] = None,
     ) -> List[RawImageMatch]:
         """
         Project an orthophoto pixel to raw image pixels.
@@ -272,6 +299,8 @@ class CameraProjector:
                       looks up from DSM for precise elevation.
             max_gps_distance: Maximum horizontal distance (meters) from drone to defect.
                              Images where drone was farther than this are excluded.
+                             If None, distance filtering is disabled and all shots
+                             in reconstruction are considered.
 
         Returns:
             List of RawImageMatch objects, sorted by distance_from_center (best first).
@@ -289,18 +318,29 @@ class CameraProjector:
         world_point = np.array([world_x, world_y, elevation])
         defect_xy = np.array([world_x, world_y])
 
+        # QC logging: track projection pipeline
+        logger.debug(
+            f"Projection pipeline: ortho_px=({ortho_x:.1f}, {ortho_y:.1f}) -> "
+            f"world_enu=({world_x:.2f}, {world_y:.2f}, z={elevation:.2f}m)"
+        )
+
         matches = []
+        filtered_by_distance = 0
+        filtered_by_bounds = 0
+        projection_failed = 0
 
         for image_name, shot in self.shots.items():
             try:
                 # FIRST: Check GPS distance - only consider images where drone was close enough
-                gps_position = shot.get('gps_position')
-                if gps_position:
-                    drone_xy = np.array([gps_position[0], gps_position[1]])
-                    gps_dist = np.linalg.norm(defect_xy - drone_xy)
-                    if gps_dist > max_gps_distance:
-                        # Drone was too far away - this image cannot contain the defect
-                        continue
+                if max_gps_distance is not None:
+                    gps_position = shot.get('gps_position')
+                    if gps_position:
+                        drone_xy = np.array([gps_position[0], gps_position[1]])
+                        gps_dist = np.linalg.norm(defect_xy - drone_xy)
+                        if gps_dist > max_gps_distance:
+                            # Drone was too far away - this image cannot contain the defect
+                            filtered_by_distance += 1
+                            continue
 
                 # THEN: Project to get precise pixel coordinates
                 pixel_coords = self._project_to_camera(world_point, shot)
@@ -322,12 +362,30 @@ class CameraProjector:
                             pixel_y=py,
                             distance_from_center=dist,
                         ))
+                    else:
+                        filtered_by_bounds += 1
+                else:
+                    projection_failed += 1
             except Exception as e:
                 logger.debug(f"Projection failed for {image_name}: {e}")
+                projection_failed += 1
                 continue
 
         # Sort by distance from center (most central first)
         matches.sort(key=lambda m: m.distance_from_center)
+
+        # QC logging: summarize filtering
+        logger.debug(
+            f"Projection candidates: {len(matches)} matches, "
+            f"filtered_by_distance={filtered_by_distance} (>{max_gps_distance}m), "
+            f"filtered_by_bounds={filtered_by_bounds}, projection_failed={projection_failed}"
+        )
+        if matches:
+            best = matches[0]
+            logger.debug(
+                f"Best match: {best.image_name} at raw_px=({best.pixel_x:.1f}, {best.pixel_y:.1f}), "
+                f"centrality={1-best.distance_from_center:.2f}"
+            )
 
         return matches
 
@@ -381,6 +439,16 @@ class CameraProjector:
 
         # Get shot data for this image
         shot = self.shots.get(image_name)
+
+        # If not found, try stripping UUID prefix (uploads have UUID_DJI_..., reconstruction has DJI_...)
+        if shot is None:
+            match = UUID_PREFIX_PATTERN.match(image_name)
+            if match:
+                stripped_name = match.group(1)
+                shot = self.shots.get(stripped_name)
+                if shot:
+                    logger.debug(f"Found {stripped_name} after stripping UUID prefix from {image_name}")
+
         if shot is None:
             logger.debug(f"Image {image_name} not found in reconstruction")
             return None
