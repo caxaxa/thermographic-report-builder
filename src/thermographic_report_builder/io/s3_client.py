@@ -39,7 +39,7 @@ class S3Client:
         Raises:
             S3DownloadError: If download fails
         """
-        key = f"{settings.user_id}/projects/{settings.project_id}/odm_orthophoto/odm_orthophoto.tif"
+        key = f"{settings.user_id}/projects/{settings.project_id}/odm_orthophoto.tif"
         bucket = settings.orthos_bucket
 
         logger.info(f"Downloading orthophoto from s3://{bucket}/{key}")
@@ -324,6 +324,37 @@ class S3Client:
                 logger.warning(f"Failed to download reconstruction.json: {e}")
                 return None
 
+    def download_tracks_csv(self, local_path: Path) -> Path | None:
+        """
+        Download OpenSfM tracks.csv for feature correspondence.
+
+        This file contains 2D observations that link 3D points to image pixels.
+        It can be used to compute per-image residual offsets without ground truth pairs.
+
+        Args:
+            local_path: Local path to save the file
+
+        Returns:
+            Path to downloaded file, or None if not available
+        """
+        key = f"{settings.user_id}/projects/{settings.project_id}/opensfm/tracks.csv"
+        bucket = settings.orthos_bucket
+
+        logger.info(f"Attempting to download tracks.csv from s3://{bucket}/{key}")
+
+        try:
+            self.s3.download_file(Bucket=bucket, Key=key, Filename=str(local_path))
+            size_mb = local_path.stat().st_size / 1_000_000
+            logger.info(f"Downloaded tracks.csv: {size_mb:.2f} MB (feature calibration enabled)")
+            return local_path
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchKey', '404'):
+                logger.info("tracks.csv not found - feature calibration disabled")
+                return None
+            logger.warning(f"Failed to download tracks.csv: {e}")
+            return None
+
     def download_dsm(self, local_path: Path) -> Path | None:
         """
         Download Digital Surface Model (DSM) from S3.
@@ -360,6 +391,130 @@ class S3Client:
             else:
                 logger.warning(f"Failed to download DSM: {e}")
                 return None
+
+    def download_textured_mesh(self, local_path: Path) -> Path | None:
+        """
+        Download the textured mesh (odm_textured_model_geo.obj) from S3.
+
+        The mesh is required for deterministic backtracking (ortho pixel -> face -> view).
+
+        Args:
+            local_path: Local path to save the mesh OBJ
+
+        Returns:
+            Path to downloaded file, or None if not available
+        """
+        key = f"{settings.user_id}/projects/{settings.project_id}/mesh/odm_textured_model_geo.obj"
+        bucket = settings.orthos_bucket
+
+        logger.info(f"Attempting to download mesh from s3://{bucket}/{key}")
+
+        try:
+            self.s3.download_file(Bucket=bucket, Key=key, Filename=str(local_path))
+            size_mb = local_path.stat().st_size / 1_000_000
+            logger.info(f"Downloaded mesh: {size_mb:.2f} MB")
+            return local_path
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchKey', '404'):
+                logger.info("Mesh not found - deterministic backtracking unavailable")
+                return None
+            logger.warning(f"Failed to download mesh: {e}")
+            return None
+
+    def download_labeling_vec(self, local_path: Path) -> Path | None:
+        """
+        Download the labeling vector (odm_textured_model_geo_labeling.vec) from S3.
+
+        This file maps mesh faces to view indices used during texturing.
+
+        Args:
+            local_path: Local path to save the labeling file
+
+        Returns:
+            Path to downloaded file, or None if not available
+        """
+        key = f"{settings.user_id}/projects/{settings.project_id}/mesh/odm_textured_model_geo_labeling.vec"
+        bucket = settings.orthos_bucket
+
+        logger.info(f"Attempting to download labeling vec from s3://{bucket}/{key}")
+
+        try:
+            self.s3.download_file(Bucket=bucket, Key=key, Filename=str(local_path))
+            size_mb = local_path.stat().st_size / 1_000_000
+            logger.info(f"Downloaded labeling vec: {size_mb:.2f} MB")
+            return local_path
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchKey', '404'):
+                logger.info("Labeling vec not found - deterministic backtracking unavailable")
+                return None
+            logger.warning(f"Failed to download labeling vec: {e}")
+            return None
+
+    def download_reconstruction_nvm(self, local_path: Path) -> Path | None:
+        """
+        Download the OpenSfM reconstruction.nvm file from S3.
+
+        The NVM file provides the view ordering used by the labeling vec.
+
+        Args:
+            local_path: Local path to save the file
+
+        Returns:
+            Path to downloaded file, or None if not available
+        """
+        key = f"{settings.user_id}/projects/{settings.project_id}/opensfm/reconstruction.nvm"
+        bucket = settings.orthos_bucket
+
+        logger.info(f"Attempting to download reconstruction.nvm from s3://{bucket}/{key}")
+
+        try:
+            self.s3.download_file(Bucket=bucket, Key=key, Filename=str(local_path))
+            size_mb = local_path.stat().st_size / 1_000_000
+            logger.info(f"Downloaded reconstruction.nvm: {size_mb:.2f} MB")
+            return local_path
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchKey', '404'):
+                logger.info("reconstruction.nvm not found - deterministic backtracking unavailable")
+                return None
+            logger.warning(f"Failed to download reconstruction.nvm: {e}")
+            return None
+
+    def download_source_map(self, local_path: Path) -> Path | None:
+        """
+        Download the ODM orthophoto source-map from S3.
+
+        The source-map (odm_orthophoto_sources.tif) is a 3-band GeoTIFF that maps
+        each orthophoto pixel to its source raw image and coordinates:
+        - Band 1: view_id (camera index, 0-based, matching NVM order)
+        - Band 2: raw_x (x coordinate in raw image)
+        - Band 3: raw_y (y coordinate in raw image)
+
+        Args:
+            local_path: Local path to save the file
+
+        Returns:
+            Path to downloaded file, or None if not available
+        """
+        key = f"{settings.user_id}/projects/{settings.project_id}/odm_orthophoto_sources.tif"
+        bucket = settings.orthos_bucket
+
+        logger.info(f"Attempting to download source-map from s3://{bucket}/{key}")
+
+        try:
+            self.s3.download_file(Bucket=bucket, Key=key, Filename=str(local_path))
+            size_mb = local_path.stat().st_size / 1_000_000
+            logger.info(f"Downloaded source-map: {size_mb:.2f} MB")
+            return local_path
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchKey', '404'):
+                logger.info("Source-map not found - will use camera projection fallback")
+                return None
+            logger.warning(f"Failed to download source-map: {e}")
+            return None
 
     def download_odm_stats(self, output_dir: Path) -> Path:
         """
@@ -491,6 +646,39 @@ class S3Client:
                 return None
             else:
                 logger.warning(f"Failed to download crop annotation: {e}")
+                return None
+
+    def download_crop_annotation_metadata(self, local_path: Path) -> Path | None:
+        """
+        Download crop_annotation_metadata.json from S3.
+
+        This file contains the preview image dimensions used when creating
+        the crop annotation. Needed to scale crop coordinates from preview
+        space to full orthophoto space.
+
+        Args:
+            local_path: Local path to save the file
+
+        Returns:
+            Path to downloaded file, or None if not available
+        """
+        key = f"{settings.user_id}/projects/{settings.project_id}/groundtruth/crop_annotation_metadata.json"
+        bucket = settings.groundtruth_bucket
+
+        logger.info(f"Attempting to download crop annotation metadata from s3://{bucket}/{key}")
+
+        try:
+            self.s3.download_file(Bucket=bucket, Key=key, Filename=str(local_path))
+            size_bytes = local_path.stat().st_size
+            logger.info(f"Downloaded crop annotation metadata: {size_bytes} bytes")
+            return local_path
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchKey', '404'):
+                logger.info("Crop annotation metadata not found")
+                return None
+            else:
+                logger.warning(f"Failed to download crop annotation metadata: {e}")
                 return None
 
     def download_tex_bundle(self, work_dir: Path) -> bool:

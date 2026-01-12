@@ -222,6 +222,9 @@ class ThermalAnnotator:
         panel_bbox_visual: Optional[Tuple[int, int, int, int]] = None,
         edge_margin: int = 50,
         hot_search_radius: int = 60,
+        image_format=None,
+        visual_size: Optional[Tuple[int, int]] = None,
+        flight_direction: Optional[str] = None,
     ) -> Optional[HotColdPoints]:
         """
         Find hottest and coldest points WITHIN the panel bounding box.
@@ -233,12 +236,14 @@ class ThermalAnnotator:
 
         Args:
             image_path: Path to DJI thermal R-JPEG image
-            initial_x: Initial X coordinate in VISUAL image (1280x1024)
-            initial_y: Initial Y coordinate in VISUAL image (1280x1024)
+            initial_x: Initial X coordinate in VISUAL image (1280x1024), already rotated if needed
+            initial_y: Initial Y coordinate in VISUAL image (1280x1024), already rotated if needed
             panel_bbox_visual: Optional (left, top, right, bottom) in visual coords (1280x1024).
                               If provided, search is constrained to within this panel.
+                              Already rotated if flight_direction is 'south'.
             edge_margin: Pixels to exclude from edges when searching for cold point (visual coords)
             hot_search_radius: Radius around initial point to search for hottest pixel (visual coords)
+            flight_direction: 'south' if drone was flying south (thermal array needs 180° rotation)
 
         Returns:
             HotColdPoints or None if detection fails
@@ -256,19 +261,42 @@ class ThermalAnnotator:
             # Convert from visual (1280x1024) to thermal (640x512) coordinates
             # This applies any configured alignment offset
             from ..utils.thermal_alignment import (
-                visual_to_thermal, thermal_to_visual, clamp_thermal_coords,
-                visual_bbox_to_thermal, SCALE_X
+                visual_to_thermal,
+                thermal_to_visual,
+                clamp_thermal_coords,
+                visual_bbox_to_thermal,
+                ImageFormat,
             )
 
-            thermal_init_x_f, thermal_init_y_f = visual_to_thermal(initial_x, initial_y)
-            thermal_init_x, thermal_init_y = clamp_thermal_coords(thermal_init_x_f, thermal_init_y_f)
+            if image_format is None:
+                image_format = ImageFormat.VISUAL_THERMAL
+
+            thermal_size = (width, height)
+            thermal_init_x_f, thermal_init_y_f = visual_to_thermal(
+                initial_x,
+                initial_y,
+                image_format=image_format,
+                visual_size=visual_size,
+                thermal_size=thermal_size,
+            )
+            thermal_init_x, thermal_init_y = clamp_thermal_coords(
+                thermal_init_x_f,
+                thermal_init_y_f,
+                thermal_size=thermal_size,
+            )
 
             # Create panel mask in thermal coordinates
             if panel_bbox_visual is not None:
                 # Convert panel bbox from visual to thermal coordinates (with alignment)
                 left_v, top_v, right_v, bottom_v = panel_bbox_visual
                 left_t, top_t, right_t, bottom_t = visual_bbox_to_thermal(
-                    left_v, top_v, right_v, bottom_v
+                    left_v,
+                    top_v,
+                    right_v,
+                    bottom_v,
+                    image_format=image_format,
+                    visual_size=visual_size,
+                    thermal_size=thermal_size,
                 )
 
                 # Create panel mask
@@ -285,7 +313,11 @@ class ThermalAnnotator:
                 panel_height_t = bottom_t - top_t
 
                 # Take the larger of: fixed margin OR 30% of panel dimension
-                edge_margin_t = int(edge_margin * SCALE_X)
+                if image_format == ImageFormat.VISUAL_THERMAL and visual_size:
+                    scale_x = thermal_size[0] / visual_size[0]
+                else:
+                    scale_x = 1.0
+                edge_margin_t = int(edge_margin * scale_x)
                 margin_x = max(edge_margin_t, int(panel_width_t * 0.30))
                 margin_y = max(edge_margin_t, int(panel_height_t * 0.30))
 
@@ -342,7 +374,11 @@ class ThermalAnnotator:
             )
 
             # Scale search radius to thermal coords
-            hot_radius_t = int(hot_search_radius * SCALE_X)
+            if image_format == ImageFormat.VISUAL_THERMAL and visual_size:
+                scale_x = thermal_size[0] / visual_size[0]
+            else:
+                scale_x = 1.0
+            hot_radius_t = int(hot_search_radius * scale_x)
 
             # Inner search: small radius around initial point, within panel
             inner_search_mask = (dist_from_initial <= hot_radius_t) & panel_mask
@@ -397,10 +433,22 @@ class ThermalAnnotator:
             cold_temp = float(temp_array[cold_thermal_y, cold_thermal_x])
 
             # Convert back to visual coordinates (with alignment correction reversed)
-            hot_visual_x, hot_visual_y = thermal_to_visual(hot_thermal_x, hot_thermal_y)
+            hot_visual_x, hot_visual_y = thermal_to_visual(
+                hot_thermal_x,
+                hot_thermal_y,
+                image_format=image_format,
+                visual_size=visual_size,
+                thermal_size=thermal_size,
+            )
             hot_visual_x = int(hot_visual_x)
             hot_visual_y = int(hot_visual_y)
-            cold_visual_x, cold_visual_y = thermal_to_visual(cold_thermal_x, cold_thermal_y)
+            cold_visual_x, cold_visual_y = thermal_to_visual(
+                cold_thermal_x,
+                cold_thermal_y,
+                image_format=image_format,
+                visual_size=visual_size,
+                thermal_size=thermal_size,
+            )
             cold_visual_x = int(cold_visual_x)
             cold_visual_y = int(cold_visual_y)
 
@@ -439,6 +487,7 @@ class ThermalAnnotator:
         zoom_size: int = 200,
         output_size: Tuple[int, int] = (600, 500),
         panel_bbox_visual: Optional[Tuple[int, int, int, int]] = None,
+        flight_direction: Optional[str] = None,
     ) -> Optional[AnnotatedThermalImage]:
         """
         Create an annotated thermal image centered on the defect with hot/cold markers.
@@ -449,8 +498,8 @@ class ThermalAnnotator:
 
         Args:
             raw_image_path: Path to the raw thermal image (DJI R-JPEG)
-            defect_pixel_x: X pixel coordinate of defect in raw image
-            defect_pixel_y: Y pixel coordinate of defect in raw image
+            defect_pixel_x: X pixel coordinate of defect in raw image (unrotated coords)
+            defect_pixel_y: Y pixel coordinate of defect in raw image (unrotated coords)
             panel_id: Panel identifier (e.g., "A-01")
             panel_row: Panel row number
             panel_column: Panel column number
@@ -462,6 +511,8 @@ class ThermalAnnotator:
             panel_bbox_visual: Panel bounding box in VISUAL coordinates (left, top, right, bottom)
                               as projected onto the raw thermal image. Used to constrain
                               hot/cold search to within the panel only.
+            flight_direction: 'south' if drone was flying south (image needs 180° rotation),
+                             'north' or None if no rotation needed.
 
         Returns:
             AnnotatedThermalImage or None if extraction fails
@@ -471,16 +522,6 @@ class ThermalAnnotator:
             return None
 
         try:
-            # Find hot and cold points constrained to panel bounding box
-            hot_cold = self.find_hot_cold_points(
-                image_path=raw_image_path,
-                initial_x=int(defect_pixel_x),
-                initial_y=int(defect_pixel_y),
-                panel_bbox_visual=panel_bbox_visual,
-                edge_margin=50,  # Exclude 50 visual pixels from edges for cold search (avoid shadows)
-                hot_search_radius=60,  # Search within 60px radius of initial point for hottest
-            )
-
             # Load the visual image
             img = cv2.imread(str(raw_image_path))
             if img is None:
@@ -488,6 +529,46 @@ class ThermalAnnotator:
                 return None
 
             img_h, img_w = img.shape[:2]
+
+            # Apply 180° rotation for south-facing images
+            # This rotates both the image and transforms the input coordinates
+            if flight_direction == "south":
+                img = cv2.rotate(img, cv2.ROTATE_180)
+                # Transform coordinates for rotated image: (x, y) -> (w-1-x, h-1-y)
+                defect_pixel_x = img_w - 1 - defect_pixel_x
+                defect_pixel_y = img_h - 1 - defect_pixel_y
+                # Also transform panel bbox if provided
+                if panel_bbox_visual is not None:
+                    left, top, right, bottom = panel_bbox_visual
+                    # After 180° rotation: new_left = w-1-right, new_right = w-1-left, etc.
+                    panel_bbox_visual = (
+                        img_w - 1 - right,   # new left
+                        img_h - 1 - bottom,  # new top
+                        img_w - 1 - left,    # new right
+                        img_h - 1 - top,     # new bottom
+                    )
+                logger.debug(f"Rotated image 180° for south-facing flight")
+
+            # Determine image format and size for thermal alignment
+            from ..utils.thermal_alignment import ImageFormat
+            image_format = ImageFormat.VISUAL_THERMAL
+            if img_w != 1280 or img_h != 1024:
+                image_format = ImageFormat.THERMAL_ONLY
+            visual_size = (img_w, img_h)
+
+            # Find hot and cold points constrained to panel bounding box
+            # Note: defect_pixel_x/y and panel_bbox_visual are already rotated if south-facing
+            hot_cold = self.find_hot_cold_points(
+                image_path=raw_image_path,
+                initial_x=int(defect_pixel_x),
+                initial_y=int(defect_pixel_y),
+                panel_bbox_visual=panel_bbox_visual,
+                edge_margin=50,  # Exclude 50 visual pixels from edges for cold search (avoid shadows)
+                hot_search_radius=60,  # Search within 60px radius of initial point for hottest
+                image_format=image_format,
+                visual_size=visual_size,
+                flight_direction=flight_direction,  # For thermal array rotation
+            )
 
             # REQUIRE hot_cold detection - no fallback, skip thermal analysis if it fails
             if not hot_cold:
@@ -717,16 +798,32 @@ class ThermalAnnotator:
                 logger.warning(f"Could not get temperature array for {raw_image_path}")
                 return None
 
-            # Clamp coordinates to valid range
-            from ..utils.thermal_alignment import clamp_thermal_coords, thermal_to_visual
-
-            hot_tx, hot_ty = clamp_thermal_coords(hot_point.x, hot_point.y)
-            cold_tx, cold_ty = clamp_thermal_coords(cold_point.x, cold_point.y)
-
             # Get temperatures using 5x5 area around the clicked point
             # Hot point: take maximum temperature in 5x5 area
             # Cold point: take minimum temperature in 5x5 area
             height, width = temp_array.shape
+            thermal_size = (width, height)
+
+            # Load the visual image to determine dimensions
+            img = cv2.imread(str(raw_image_path))
+            if img is None:
+                logger.warning(f"Could not load image: {raw_image_path}")
+                return None
+            img_h, img_w = img.shape[:2]
+
+            from ..utils.thermal_alignment import clamp_thermal_coords, thermal_to_visual, ImageFormat
+            image_format = ImageFormat.VISUAL_THERMAL
+            if img_w != 1280 or img_h != 1024:
+                image_format = ImageFormat.THERMAL_ONLY
+            visual_size = (img_w, img_h)
+
+            # Clamp coordinates to valid range
+            hot_tx, hot_ty = clamp_thermal_coords(
+                hot_point.x, hot_point.y, thermal_size=thermal_size
+            )
+            cold_tx, cold_ty = clamp_thermal_coords(
+                cold_point.x, cold_point.y, thermal_size=thermal_size
+            )
 
             # Extract 5x5 region around hot point and find max
             hot_y1 = max(0, hot_ty - 2)
@@ -746,8 +843,20 @@ class ThermalAnnotator:
             delta_t = hot_temp - cold_temp
 
             # Convert thermal coordinates to visual coordinates for drawing
-            hot_vx, hot_vy = thermal_to_visual(hot_tx, hot_ty)
-            cold_vx, cold_vy = thermal_to_visual(cold_tx, cold_ty)
+            hot_vx, hot_vy = thermal_to_visual(
+                hot_tx,
+                hot_ty,
+                image_format=image_format,
+                visual_size=visual_size,
+                thermal_size=thermal_size,
+            )
+            cold_vx, cold_vy = thermal_to_visual(
+                cold_tx,
+                cold_ty,
+                image_format=image_format,
+                visual_size=visual_size,
+                thermal_size=thermal_size,
+            )
 
             # Create HotColdPoints structure (in visual coords for drawing)
             hot_cold = HotColdPoints(
@@ -759,14 +868,6 @@ class ThermalAnnotator:
                 cold_temp=round(cold_temp, 1),
                 delta_t=round(delta_t, 1),
             )
-
-            # Load the visual image
-            img = cv2.imread(str(raw_image_path))
-            if img is None:
-                logger.warning(f"Could not load image: {raw_image_path}")
-                return None
-
-            img_h, img_w = img.shape[:2]
 
             center_pixel_x = hot_cold.hot_x
             center_pixel_y = hot_cold.hot_y

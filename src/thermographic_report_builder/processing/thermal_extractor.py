@@ -216,6 +216,8 @@ class ThermalExtractor:
         pixel_y: int,
         panel_region: Optional[Tuple[int, int, int, int]] = None,
         sample_radius: int = 50,
+        image_format=None,
+        visual_size: Optional[Tuple[int, int]] = None,
     ) -> Optional[TemperatureReading]:
         """
         Extract temperature at a specific pixel location.
@@ -248,13 +250,33 @@ class ThermalExtractor:
 
             # Convert from visual (1280x1024) to thermal (640x512) coordinates
             # This applies any configured alignment offset and scales by 0.5
-            from ..utils.thermal_alignment import visual_to_thermal, clamp_thermal_coords, SCALE_X
+            from ..utils.thermal_alignment import (
+                visual_to_thermal,
+                clamp_thermal_coords,
+                ImageFormat,
+            )
 
-            thermal_x, thermal_y = visual_to_thermal(pixel_x, pixel_y)
-            pixel_x, pixel_y = clamp_thermal_coords(thermal_x, thermal_y)
+            if image_format is None:
+                image_format = ImageFormat.VISUAL_THERMAL
+
+            thermal_size = (width, height)
+            thermal_x, thermal_y = visual_to_thermal(
+                pixel_x,
+                pixel_y,
+                image_format=image_format,
+                visual_size=visual_size,
+                thermal_size=thermal_size,
+            )
+            pixel_x, pixel_y = clamp_thermal_coords(
+                thermal_x,
+                thermal_y,
+                thermal_size=thermal_size,
+            )
 
             # Also scale the sample radius for the thermal resolution
-            sample_radius = int(sample_radius * SCALE_X)
+            if image_format == ImageFormat.VISUAL_THERMAL and visual_size:
+                scale_x = thermal_size[0] / visual_size[0]
+                sample_radius = int(sample_radius * scale_x)
 
             # Get temperature at defect location
             defect_temp = float(temp_array[pixel_y, pixel_x])
@@ -324,6 +346,8 @@ class ThermalExtractor:
         initial_x: int,
         initial_y: int,
         search_radius: int = 100,
+        image_format=None,
+        visual_size: Optional[Tuple[int, int]] = None,
     ) -> Tuple[int, int, float]:
         """
         Find the local temperature maximum near a given pixel.
@@ -355,12 +379,33 @@ class ThermalExtractor:
             # Convert from visual (1280x1024) to thermal (640x512) coordinates
             # This applies any configured alignment offset
             from ..utils.thermal_alignment import (
-                visual_to_thermal, thermal_to_visual, clamp_thermal_coords, SCALE_X
+                visual_to_thermal,
+                thermal_to_visual,
+                clamp_thermal_coords,
+                ImageFormat,
             )
 
-            thermal_x_f, thermal_y_f = visual_to_thermal(initial_x, initial_y)
-            thermal_x, thermal_y = clamp_thermal_coords(thermal_x_f, thermal_y_f)
-            thermal_radius = int(search_radius * SCALE_X)
+            if image_format is None:
+                image_format = ImageFormat.VISUAL_THERMAL
+
+            thermal_size = (width, height)
+            thermal_x_f, thermal_y_f = visual_to_thermal(
+                initial_x,
+                initial_y,
+                image_format=image_format,
+                visual_size=visual_size,
+                thermal_size=thermal_size,
+            )
+            thermal_x, thermal_y = clamp_thermal_coords(
+                thermal_x_f,
+                thermal_y_f,
+                thermal_size=thermal_size,
+            )
+            if image_format == ImageFormat.VISUAL_THERMAL and visual_size:
+                scale_x = thermal_size[0] / visual_size[0]
+                thermal_radius = int(search_radius * scale_x)
+            else:
+                thermal_radius = search_radius
 
             # Define search region in thermal coordinates
             x1 = max(0, thermal_x - thermal_radius)
@@ -385,7 +430,11 @@ class ThermalExtractor:
 
             # Convert hotspot coordinates back to visual resolution
             visual_hotspot_x, visual_hotspot_y = thermal_to_visual(
-                thermal_hotspot_x, thermal_hotspot_y
+                thermal_hotspot_x,
+                thermal_hotspot_y,
+                image_format=image_format,
+                visual_size=visual_size,
+                thermal_size=thermal_size,
             )
             visual_hotspot_x = int(visual_hotspot_x)
             visual_hotspot_y = int(visual_hotspot_y)

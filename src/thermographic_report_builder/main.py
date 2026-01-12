@@ -7,7 +7,8 @@ from pathlib import Path
 from .config import settings
 from .io import S3Client, load_defect_labels
 from .io.image_loader import load_orthophoto
-from .processing import DefectMapper, annotate_orthophoto, create_layer_image, crop_defect_regions, GPSMatcher, create_dxf_layers
+from .processing import DefectMapper, annotate_orthophoto, create_layer_image, crop_defect_regions, GPSMatcher, create_dxf_layers, CropTransform
+from .processing.camera_projector import CameraProjector
 from .report import ReportBuilder, export_metrics_json, export_metrics_csv, export_panel_grid_json
 from .models.report import ReportConfig
 from .models.job import JobOutput
@@ -193,8 +194,9 @@ def main() -> int:
 
         s3_client = S3Client()
 
-        # Download orthophoto (prefer resampled 1.6cm version for coordinate consistency)
-        ortho_path, ortho_version = s3_client.download_orthophoto_resampled(
+        # Download orthophoto - prefer resampled (1.6cm) which is ALREADY cropped/rotated
+        # by the inference pipeline. This matches the defect label coordinate space.
+        visualization_ortho_path, ortho_version = s3_client.download_orthophoto_resampled(
             work_dir / "odm_orthophoto.tif",
             prefer_resampled=True
         )
@@ -202,10 +204,15 @@ def main() -> int:
 
         labels_path = s3_client.download_defect_labels(work_dir / "defect_labels.json")
 
-        # Download crop annotation for layout configuration (optional)
+        # Download crop annotation for layout configuration and coordinate transform
         is_horizontal = False
         is_double_tracker = False
+        crop_data = None
+        crop_metadata = None
+
         crop_annotation_path = s3_client.download_crop_annotation(work_dir / "crop_annotation.json")
+        crop_metadata_path = s3_client.download_crop_annotation_metadata(work_dir / "crop_annotation_metadata.json")
+
         if crop_annotation_path:
             import json
             try:
@@ -223,18 +230,74 @@ def main() -> int:
                 logger.info(f"Crop annotation: isHorizontal={is_horizontal}, isDouble={is_double_tracker}")
             except Exception as e:
                 logger.warning(f"Failed to parse crop annotation: {e}")
+                crop_data = None
+
+        if crop_metadata_path:
+            import json
+            try:
+                with open(crop_metadata_path, 'r') as f:
+                    crop_metadata = json.load(f)
+                logger.info(f"Crop metadata: preview={crop_metadata.get('width')}x{crop_metadata.get('height')}")
+            except Exception as e:
+                logger.warning(f"Failed to parse crop metadata: {e}")
+                crop_metadata = None
 
         # ===== STEP 2: Load and parse data =====
         logger.info("=" * 80)
         logger.info("STEP 2: Loading orthophoto and defect labels")
         logger.info("=" * 80)
 
-        _, transform, crs, (img_h, img_w) = load_orthophoto(ortho_path)
-        geo_converter = PixelToLatLonConverter(transform, crs)
+        # Load defect labels
         defect_labels = load_defect_labels(labels_path)
 
-        logger.info(f"Orthophoto: {img_w}x{img_h} pixels")
+        # The resampled orthophoto (odm_orthophoto_1.6cm.tif) is ALREADY cropped/rotated
+        # by the inference pipeline, so it matches defect label coordinates directly
+        _, viz_transform, viz_crs, (img_h, img_w) = load_orthophoto(visualization_ortho_path)
+        logger.info(f"Visualization orthophoto: {img_w}x{img_h} pixels (already cropped/rotated)")
         logger.info(f"Labels: {len(defect_labels.get_defects())} defects, {len(defect_labels.get_panels())} panels")
+
+        # Download ORIGINAL uncropped orthophoto for mesh backtracking
+        # The mesh and geo-transform are in the uncropped coordinate space
+        uncropped_ortho_path = work_dir / "odm_orthophoto_original.tif"
+        has_original_ortho = False
+        try:
+            s3_client.download_orthophoto(uncropped_ortho_path)
+            has_original_ortho = True
+            logger.info("Downloaded original uncropped orthophoto for mesh backtracking")
+        except Exception as e:
+            logger.warning(f"Failed to download original orthophoto: {e}")
+            uncropped_ortho_path = visualization_ortho_path  # Fall back
+
+        # Get uncropped dimensions and geo-transform for mesh backtracking
+        if has_original_ortho:
+            _, uncropped_transform, crs, (uncropped_h, uncropped_w) = load_orthophoto(uncropped_ortho_path)
+            logger.info(f"Original orthophoto: {uncropped_w}x{uncropped_h} pixels (uncropped)")
+        else:
+            # Fall back to visualization ortho dimensions (no crop transform needed)
+            uncropped_transform, crs = viz_transform, viz_crs
+            uncropped_h, uncropped_w = img_h, img_w
+            logger.info("Using visualization ortho as fallback (no mesh backtracking available)")
+
+        geo_converter = PixelToLatLonConverter(uncropped_transform, crs)
+
+        # Create crop transform to map coordinates from resampled/cropped/rotated space (defect labels)
+        # to uncropped space (mesh backtracking). Only needed if we have the original ortho.
+        if has_original_ortho and crop_data and crop_metadata:
+            crop_transform = CropTransform(
+                crop_annotation=crop_data,
+                crop_metadata=crop_metadata,
+                ortho_width=uncropped_w,
+                ortho_height=uncropped_h,
+                resampled_width=img_w,
+                resampled_height=img_h,
+            )
+        else:
+            # No transform needed - either no original ortho or no crop annotation
+            crop_transform = CropTransform()
+            if not has_original_ortho:
+                logger.info("Crop transform disabled (no original orthophoto)")
+            elif not crop_data:
+                logger.info("Crop transform disabled (no crop annotation)")
 
         # ===== STEP 3: Map defects to panels =====
         logger.info("=" * 80)
@@ -260,7 +323,7 @@ def main() -> int:
         logger.info("=" * 80)
 
         annotate_orthophoto(
-            ortho_path=ortho_path,
+            ortho_path=visualization_ortho_path,
             panel_grid=panel_grid,
             output_path=images_dir / "ortho.png",
             scale_factor=settings.orthophoto_downscale_factor,
@@ -283,11 +346,14 @@ def main() -> int:
         logger.info("STEP 5.5: Creating DXF layers (CAD file)")
         logger.info("=" * 80)
 
+        # DXF needs geo_converter matching the panel_grid coordinate space (visualization ortho)
+        viz_geo_converter = PixelToLatLonConverter(viz_transform, viz_crs)
+
         dxf_path = work_dir / "layers.dxf"
         try:
             create_dxf_layers(
                 panel_grid=panel_grid,
-                geo_converter=geo_converter,
+                geo_converter=viz_geo_converter,
                 output_path=dxf_path,
                 area_name=settings.area_name,
             )
@@ -302,7 +368,7 @@ def main() -> int:
         logger.info("=" * 80)
 
         crop_defect_regions(
-            ortho_path=ortho_path,
+            ortho_path=visualization_ortho_path,
             panel_grid=panel_grid,
             output_dir=images_dir,
             layer_pdf_path=images_dir / "layer_img.pdf",
@@ -328,6 +394,10 @@ def main() -> int:
                 logger.warning(f"Failed to parse reconstruction.json: {e}")
                 reconstruction_data = None
 
+        # Try to download OpenSfM tracks.csv for feature-based calibration
+        tracks_path = work_dir / "tracks.csv"
+        tracks_path = s3_client.download_tracks_csv(tracks_path)
+
         # Try to download DSM for precise elevation
         # Using DSM elevation instead of estimated ground level significantly
         # improves projection accuracy - it's the same elevation ODM used
@@ -335,12 +405,66 @@ def main() -> int:
         if not s3_client.download_dsm(dsm_path):
             dsm_path = None
 
+        # Initialize camera projector (used for both reprojection + mesh backtracking)
+        camera_projector = CameraProjector(
+            reconstruction_json=reconstruction_data,
+            geo_converter=geo_converter,
+            dsm_path=dsm_path,
+        )
+
+        # Try to download deterministic backtracking artifacts
+        mesh_path = work_dir / "odm_textured_model_geo.obj"
+        labeling_path = work_dir / "odm_textured_model_geo_labeling.vec"
+        nvm_path = work_dir / "reconstruction.nvm"
+
+        mesh_path = s3_client.download_textured_mesh(mesh_path)
+        labeling_path = s3_client.download_labeling_vec(labeling_path)
+        nvm_path = s3_client.download_reconstruction_nvm(nvm_path)
+
+        mesh_backtracker = None
+        # Mesh backtracker can work WITHOUT labeling_path and nvm_path
+        # In that case, it uses "all cameras" mode which tries all cameras and picks the best one
+        if mesh_path:
+            from .processing.mesh_backtracker import MeshBacktracker
+            # Use uncropped ortho size for mesh backtracker (mesh is aligned to uncropped geo-transform)
+            mesh_backtracker = MeshBacktracker(
+                mesh_path=mesh_path,
+                labeling_path=labeling_path,  # Optional - if None, uses all-cameras mode
+                nvm_path=nvm_path,            # Optional - if None, uses all-cameras mode
+                geo_converter=geo_converter,
+                camera_projector=camera_projector,
+                ortho_size=(uncropped_w, uncropped_h),
+            )
+
+        # Try to download source-map for authoritative ortho->raw pixel mapping
+        # The source-map is generated by ODM and contains the exact pixel correspondence
+        # used during orthophoto creation - more reliable than camera projection
+        source_map_path = work_dir / "odm_orthophoto_sources.tif"
+        source_map_backtracker = None
+        if s3_client.download_source_map(source_map_path):
+            from .processing.source_map_backtracker import SourceMapBacktracker
+            source_map_backtracker = SourceMapBacktracker(
+                source_map_path=source_map_path,
+                nvm_path=nvm_path,  # For view_id -> image_name mapping
+            )
+            if source_map_backtracker.available:
+                stats = source_map_backtracker.get_coverage_stats()
+                logger.info(f"Source-map loaded: {stats['coverage_percent']}% coverage")
+            else:
+                source_map_backtracker = None
+                logger.warning("Source-map failed to load, using camera projection fallback")
+
         gps_matcher = GPSMatcher(
             s3_client=s3_client,
             geo_converter=geo_converter,
             reconstruction_data=reconstruction_data,
             dsm_path=dsm_path,
+            camera_projector=camera_projector,
+            mesh_backtracker=mesh_backtracker,
+            source_map_backtracker=source_map_backtracker,
+            crop_transform=crop_transform,
             enable_temperature=True,
+            tracks_path=tracks_path,
         )
         matched_count, defect_matches = gps_matcher.match_images_to_panels(
             panel_grid=panel_grid, temp_dir=raw_images_dir, output_dir=images_dir
@@ -411,7 +535,7 @@ def main() -> int:
         report_location = settings.location
         if not report_location:
             try:
-                center_lat, center_lon = get_orthophoto_center(transform, img_w, img_h, crs)
+                center_lat, center_lon = get_orthophoto_center(viz_transform, img_w, img_h, viz_crs)
                 logger.info(f"Orthophoto center: ({center_lat:.6f}, {center_lon:.6f})")
                 report_location = reverse_geocode(center_lat, center_lon)
             except Exception as e:
@@ -484,6 +608,8 @@ def main() -> int:
                 cwd=work_dir,
                 capture_output=True,
                 text=True,
+                encoding='latin-1',
+                errors='replace',
                 timeout=300
             )
             if result.returncode != 0:
@@ -500,6 +626,8 @@ def main() -> int:
                 cwd=work_dir,
                 capture_output=True,
                 text=True,
+                encoding='latin-1',
+                errors='replace',
                 timeout=300
             )
             if result.returncode != 0:

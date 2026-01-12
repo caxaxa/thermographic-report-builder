@@ -8,6 +8,7 @@ from .dxf_generator import create_dxf_layers, create_dxf_from_orthophoto
 from .camera_projector import CameraProjector, RawImageMatch, load_reconstruction
 from .thermal_extractor import ThermalExtractor, TemperatureReading
 from .thermal_annotator import ThermalAnnotator, AnnotatedThermalImage
+from .crop_transform import CropTransform
 
 __all__ = [
     "DefectMapper",
@@ -25,4 +26,5 @@ __all__ = [
     "TemperatureReading",
     "ThermalAnnotator",
     "AnnotatedThermalImage",
+    "CropTransform",
 ]

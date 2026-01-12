@@ -65,8 +65,9 @@ class CameraProjector:
             dsm_path: Optional path to DSM (Digital Surface Model) for precise elevation
         """
         self.geo_converter = geo_converter
+        self.points: Dict[str, dict] = {}
 
-        # Raw thermal images and reconstruction use the same resolution: 1280x1024
+        # Default resolution; overridden by camera model when available
         self.image_width = 1280
         self.image_height = 1024
 
@@ -108,6 +109,7 @@ class CameraProjector:
 
         self.cameras = reconstruction.get("cameras", {})
         self.shots = reconstruction.get("shots", {})
+        self.points = reconstruction.get("points", {})
         self.reference_lla = reconstruction.get("reference_lla", None)
 
         # Set up coordinate transformer from orthophoto CRS to local ENU
@@ -144,6 +146,15 @@ class CameraProjector:
             if z_coords:
                 self._ground_elevation = float(np.median(z_coords))
                 logger.info(f"Estimated ground elevation from reconstruction: {self._ground_elevation:.1f}m (local ENU)")
+
+        # Update default dimensions from the first camera if available
+        if self.cameras:
+            first_camera = next(iter(self.cameras.values()))
+            cam_width = first_camera.get("width")
+            cam_height = first_camera.get("height")
+            if cam_width and cam_height:
+                self.image_width = int(cam_width)
+                self.image_height = int(cam_height)
 
         self.available = len(self.shots) > 0
 
@@ -342,13 +353,13 @@ class CameraProjector:
                 pixel_coords = self._project_to_camera(world_point, shot)
 
                 if pixel_coords is not None:
-                    px, py = pixel_coords
+                    px, py, img_w, img_h = pixel_coords
 
-                    # Check if point is within image bounds (1280x1024)
-                    if 0 <= px < self.image_width and 0 <= py < self.image_height:
+                    # Check if point is within image bounds
+                    if 0 <= px < img_w and 0 <= py < img_h:
                         # Calculate distance from center (normalized)
-                        cx = self.image_width / 2
-                        cy = self.image_height / 2
+                        cx = img_w / 2
+                        cy = img_h / 2
                         max_dist = np.hypot(cx, cy)
                         dist = np.hypot(px - cx, py - cy) / max_dist
 
@@ -451,9 +462,9 @@ class CameraProjector:
         try:
             pixel_coords = self._project_to_camera(world_point, shot)
             if pixel_coords is not None:
-                px, py = pixel_coords
+                px, py, img_w, img_h = pixel_coords
                 # Check if within image bounds
-                if 0 <= px < self.image_width and 0 <= py < self.image_height:
+                if 0 <= px < img_w and 0 <= py < img_h:
                     logger.debug(f"Projected to {image_name}: ({px:.1f}, {py:.1f})")
                     return px, py
                 else:
@@ -462,6 +473,45 @@ class CameraProjector:
             logger.debug(f"Projection to {image_name} failed: {e}")
 
         return None
+
+    def project_world_to_image(
+        self,
+        image_name: str,
+        world_point: np.ndarray,
+    ) -> Optional[Tuple[float, float]]:
+        """
+        Project a 3D world point (local ENU) directly into a specific image.
+
+        Args:
+            image_name: Name of the target image (shot key)
+            world_point: 3D point in local ENU coordinates [x, y, z]
+
+        Returns:
+            (pixel_x, pixel_y) or None if projection fails/out of bounds
+        """
+        if not self.available:
+            return None
+
+        shot = self.shots.get(image_name)
+        if shot is None:
+            logger.debug(f"Image {image_name} not found in reconstruction")
+            return None
+
+        try:
+            pixel_coords = self._project_to_camera(world_point, shot)
+            if pixel_coords is None:
+                return None
+            px, py, img_w, img_h = pixel_coords
+            if 0 <= px < img_w and 0 <= py < img_h:
+                return px, py
+            return None
+        except Exception as e:
+            logger.debug(f"World projection failed for {image_name}: {e}")
+            return None
+
+    def ortho_to_local(self, ortho_x: float, ortho_y: float) -> Tuple[float, float]:
+        """Public wrapper for ortho pixel -> local ENU XY coordinates."""
+        return self._ortho_to_world(ortho_x, ortho_y)
 
     def _ortho_to_world(self, ortho_x: float, ortho_y: float) -> Tuple[float, float]:
         """Convert orthophoto pixel to OpenSfM local ENU coordinates.
@@ -496,7 +546,7 @@ class CameraProjector:
         self,
         world_point: np.ndarray,
         shot: dict,
-    ) -> Optional[Tuple[float, float]]:
+    ) -> Optional[Tuple[float, float, int, int]]:
         """
         Project a 3D world point into a camera's image plane.
 
@@ -512,6 +562,7 @@ class CameraProjector:
         if camera_id not in self.cameras:
             return None
         camera = self.cameras[camera_id]
+        img_w, img_h = self._get_camera_dimensions(camera)
 
         # Get camera pose
         # OpenSfM uses axis-angle rotation
@@ -564,11 +615,17 @@ class CameraProjector:
         # OpenSfM uses normalized coordinates where focal is relative to max(width, height)
         # The denormalization formula from OpenSfM docs:
         #   pixel = normalized * max(w,h) + (dimension - 1) / 2
-        max_size = max(self.image_width, self.image_height)
-        pixel_x = x_distorted * focal_x * max_size + (self.image_width - 1) / 2.0 + c_x * max_size
-        pixel_y = y_distorted * focal_y * max_size + (self.image_height - 1) / 2.0 + c_y * max_size
+        max_size = max(img_w, img_h)
+        pixel_x = x_distorted * focal_x * max_size + (img_w - 1) / 2.0 + c_x * max_size
+        pixel_y = y_distorted * focal_y * max_size + (img_h - 1) / 2.0 + c_y * max_size
 
-        return pixel_x, pixel_y
+        return pixel_x, pixel_y, img_w, img_h
+
+    def _get_camera_dimensions(self, camera: dict) -> Tuple[int, int]:
+        """Return image width/height for a camera model, with fallbacks."""
+        width = camera.get("width", self.image_width)
+        height = camera.get("height", self.image_height)
+        return int(width), int(height)
 
     @staticmethod
     def _axis_angle_to_rotation_matrix(axis_angle: np.ndarray) -> np.ndarray:
