@@ -256,6 +256,13 @@ class ThermalAnnotator:
             if temp_array is None:
                 return None
 
+            # Rotate thermal array 180° for south-facing flights
+            # This aligns the thermal data with the rotated visual coordinates
+            # Without this, we search in the wrong part of the thermal image
+            if flight_direction == "south":
+                temp_array = np.rot90(temp_array, 2)  # 180° rotation
+                logger.debug("Rotated thermal array 180° for south-facing flight")
+
             height, width = temp_array.shape
 
             # Convert from visual (1280x1024) to thermal (640x512) coordinates
