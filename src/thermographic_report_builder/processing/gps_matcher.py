@@ -470,6 +470,7 @@ class GPSMatcher:
 
                             # Refine to the hottest nearby pixel to avoid edge offsets
                             # SKIP refinement for mesh backtracking to preserve determinism
+                            # Use smaller radius for source_map (already precise) vs GPS/reprojection (less precise)
                             should_refine = match.method != "mesh"
                             if should_refine:
                                 try:
@@ -479,11 +480,19 @@ class GPSMatcher:
                                     if self._detected_image_width and self._detected_image_height:
                                         visual_size = (self._detected_image_width, self._detected_image_height)
 
+                                    # Source-map backtracking is already very precise (sub-pixel)
+                                    # Use small radius to avoid finding hotspots on neighboring panels
+                                    # GPS and reprojection need larger radius due to projection drift
+                                    if match.method == "source_map":
+                                        refine_radius = 30  # Small radius for precise source-map coords
+                                    else:
+                                        refine_radius = 150  # Larger radius for GPS/reprojection drift
+
                                     hot_x, hot_y, hot_temp = self.thermal_extractor.find_local_hotspot(
                                         image_path=match.image_path,
                                         initial_x=int(original_pixel_x),
                                         initial_y=int(original_pixel_y),
-                                        search_radius=150,  # Increased to catch slight projection drift
+                                        search_radius=refine_radius,
                                         image_format=image_format,
                                         visual_size=visual_size,
                                     )
@@ -620,6 +629,13 @@ class GPSMatcher:
                                         min(img_max_h, int(original_pixel_y + padding)),
                                     )
 
+                                # Use smaller search radius for source-map (already precise)
+                                # vs larger radius for GPS/reprojection (more drift)
+                                if match.method == "source_map":
+                                    hot_search_radius = 30  # Small radius, source-map is precise
+                                else:
+                                    hot_search_radius = 60  # Default for less precise methods
+
                                 annotated = self.thermal_annotator.create_annotated_image(
                                     raw_image_path=match.image_path,
                                     defect_pixel_x=original_pixel_x,
@@ -632,6 +648,7 @@ class GPSMatcher:
                                     defect_index=defect_idx,  # Pass defect index for labeling
                                     panel_bbox_visual=panel_bbox_visual,  # Constrain search to panel
                                     flight_direction=flight_dir,  # For image rotation
+                                    hot_search_radius=hot_search_radius,  # Match refinement radius
                                 )
 
                                 if annotated:
