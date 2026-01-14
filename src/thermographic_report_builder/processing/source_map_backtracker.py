@@ -27,23 +27,24 @@ class SourceMapResult:
     """Result of source-map lookup."""
 
     view_id: int  # Camera index (0-based) from NVM
-    raw_pixel_x: int  # X coordinate in raw image
-    raw_pixel_y: int  # Y coordinate in raw image
+    raw_pixel_x: float  # X coordinate in raw image (sub-pixel precision)
+    raw_pixel_y: float  # Y coordinate in raw image (sub-pixel precision)
     image_name: Optional[str] = None  # Resolved image name
 
 
 class SourceMapBacktracker:
     """Backtrack orthophoto pixels to raw image pixels using ODM source-map.
 
-    The source-map is a 3-band GeoTIFF where:
-    - Band 1: view_id (camera index from NVM, 0-based)
-    - Band 2: raw_x (x coordinate in raw image)
-    - Band 3: raw_y (y coordinate in raw image)
+    The source-map is a 3-band Float32 GeoTIFF where:
+    - Band 1: view_id (camera index from NVM, 0-based, as float)
+    - Band 2: raw_x (x coordinate in raw image, sub-pixel precision)
+    - Band 3: raw_y (y coordinate in raw image, sub-pixel precision)
 
-    Invalid pixels have view_id = 65535 (uint16 max).
+    Invalid pixels have NaN values.
+    Legacy uint16 source-maps (view_id = 65535 for invalid) are also supported.
     """
 
-    INVALID_VIEW_ID = 65535
+    INVALID_VIEW_ID = 65535  # For backward compatibility with uint16 source-maps
 
     def __init__(
         self,
@@ -71,10 +72,10 @@ class SourceMapBacktracker:
 
         try:
             with rasterio.open(source_map_path) as src:
-                # Read all 3 bands
-                self.view_ids = src.read(1).astype(np.uint16)
-                self.raw_x = src.read(2).astype(np.uint16)
-                self.raw_y = src.read(3).astype(np.uint16)
+                # Read all 3 bands as float32 (supports both new float32 and legacy uint16)
+                self.view_ids = src.read(1).astype(np.float32)
+                self.raw_x = src.read(2).astype(np.float32)
+                self.raw_y = src.read(3).astype(np.float32)
                 self.height, self.width = self.view_ids.shape
 
                 # Store transform for coordinate conversion
@@ -167,15 +168,21 @@ class SourceMapBacktracker:
             logger.debug(f"Source-map lookup out of bounds: ({col}, {row})")
             return None
 
-        view_id = int(self.view_ids[row, col])
+        view_id_val = self.view_ids[row, col]
 
-        # Check for invalid pixel
-        if view_id == self.INVALID_VIEW_ID or view_id == 0:
-            logger.debug(f"Invalid view_id at ({col}, {row}): {view_id}")
+        # Check for invalid pixel (NaN for float32, 65535 for legacy uint16)
+        if np.isnan(view_id_val) or view_id_val == self.INVALID_VIEW_ID or view_id_val == 0:
+            logger.debug(f"Invalid view_id at ({col}, {row}): {view_id_val}")
             return None
 
-        raw_x = int(self.raw_x[row, col])
-        raw_y = int(self.raw_y[row, col])
+        view_id = int(view_id_val)
+        raw_x = float(self.raw_x[row, col])
+        raw_y = float(self.raw_y[row, col])
+
+        # Check for NaN in coordinates (float32 source-maps use NaN for invalid)
+        if np.isnan(raw_x) or np.isnan(raw_y):
+            logger.debug(f"Invalid raw coordinates at ({col}, {row}): NaN")
+            return None
 
         # Get image name from view_id
         image_name = self.view_id_to_name.get(view_id)
@@ -236,12 +243,17 @@ class SourceMapBacktracker:
                 if c < 0 or c >= self.width or r < 0 or r >= self.height:
                     continue
 
-                view_id = int(self.view_ids[r, c])
-                if view_id == self.INVALID_VIEW_ID or view_id == 0:
+                view_id_val = self.view_ids[r, c]
+                if np.isnan(view_id_val) or view_id_val == self.INVALID_VIEW_ID or view_id_val == 0:
                     continue
 
-                raw_x = int(self.raw_x[r, c])
-                raw_y = int(self.raw_y[r, c])
+                view_id = int(view_id_val)
+                raw_x = float(self.raw_x[r, c])
+                raw_y = float(self.raw_y[r, c])
+
+                # Skip if coordinates are NaN
+                if np.isnan(raw_x) or np.isnan(raw_y):
+                    continue
 
                 # Count by view_id (image selection is most important)
                 results[view_id] += 1
@@ -264,9 +276,12 @@ class SourceMapBacktracker:
                 if c < 0 or c >= self.width or r < 0 or r >= self.height:
                     continue
 
-                if int(self.view_ids[r, c]) == best_view_id:
-                    raw_x = int(self.raw_x[r, c])
-                    raw_y = int(self.raw_y[r, c])
+                view_id_val = self.view_ids[r, c]
+                if not np.isnan(view_id_val) and int(view_id_val) == best_view_id:
+                    raw_x = float(self.raw_x[r, c])
+                    raw_y = float(self.raw_y[r, c])
+                    if np.isnan(raw_x) or np.isnan(raw_y):
+                        continue
                     image_name = self.view_id_to_name.get(best_view_id)
 
                     logger.debug(
@@ -289,7 +304,8 @@ class SourceMapBacktracker:
             return {"available": False}
 
         total = self.width * self.height
-        valid = int(np.sum(self.view_ids != self.INVALID_VIEW_ID))
+        # Count valid pixels (not NaN and not INVALID_VIEW_ID)
+        valid = int(np.sum(~np.isnan(self.view_ids) & (self.view_ids != self.INVALID_VIEW_ID) & (self.view_ids != 0)))
 
         return {
             "available": True,

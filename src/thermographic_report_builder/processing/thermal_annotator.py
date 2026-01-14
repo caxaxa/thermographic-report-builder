@@ -366,10 +366,11 @@ class ThermalAnnotator:
                 logger.warning("Panel mask is empty, cannot find hot/cold points")
                 return None
 
-            # --- Find HOTTEST point: search in radius around initial point, within panel ---
-            # Create distance grid from initial point
+            # --- Find HOTTEST point: search in radius around initial point (DEFECT center), within panel ---
+            # Create distance grid from initial point (the individual defect center, NOT panel center)
+            # This is critical for panels with multiple hotspots - each defect must find its OWN hot point
             y_coords, x_coords = np.ogrid[:height, :width]
-            dist_from_initial = np.sqrt(
+            dist_from_defect = np.sqrt(
                 (x_coords - thermal_init_x) ** 2 + (y_coords - thermal_init_y) ** 2
             )
 
@@ -380,42 +381,42 @@ class ThermalAnnotator:
                 scale_x = 1.0
             hot_radius_t = int(hot_search_radius * scale_x)
 
-            # Inner search: small radius around initial point, within panel
-            inner_search_mask = (dist_from_initial <= hot_radius_t) & panel_mask
+            # Inner search: small radius around defect center, within panel
+            inner_search_mask = (dist_from_defect <= hot_radius_t) & panel_mask
 
-            # Also create a "prefer inner" mask - points closer to panel center
-            dist_from_center = np.sqrt(
-                (x_coords - panel_center_x) ** 2 + (y_coords - panel_center_y) ** 2
-            )
-            # Inner half of panel (closer to center)
-            panel_half_diag = np.sqrt(
-                ((right_t - left_t) / 2) ** 2 + ((bottom_t - top_t) / 2) ** 2
-            )
-            prefer_inner_mask = dist_from_center <= (panel_half_diag * 0.6)
+            # Create a "prefer near defect" mask - points closer to the DEFECT center (not panel center)
+            # This ensures each defect on a panel finds its OWN hot point, not the panel's hottest overall
+            # Use 2x search radius for preference to still find nearby hot spots
+            prefer_near_defect_mask = dist_from_defect <= (hot_radius_t * 2)
 
-            # Try to find hottest in inner search area first, preferring center
-            inner_prefer_center = inner_search_mask & prefer_inner_mask
-            if inner_prefer_center.any():
-                # Found candidates in inner area closer to center
-                hot_temps = np.where(inner_prefer_center, temp_array, -np.inf)
-                hot_idx = np.unravel_index(np.argmax(hot_temps), hot_temps.shape)
-                hot_thermal_y, hot_thermal_x = hot_idx
-                hot_temp = float(temp_array[hot_thermal_y, hot_thermal_x])
-                logger.debug(f"Found hot point in inner+center area: {hot_temp:.1f}°C")
-            elif inner_search_mask.any():
-                # Found candidates in inner area (but not center-preferred)
+            # Try to find hottest in search area around DEFECT center (not panel center)
+            # This ensures each defect on a panel finds its OWN hot point
+            if inner_search_mask.any():
+                # Found candidates within search radius of defect center
                 hot_temps = np.where(inner_search_mask, temp_array, -np.inf)
                 hot_idx = np.unravel_index(np.argmax(hot_temps), hot_temps.shape)
                 hot_thermal_y, hot_thermal_x = hot_idx
                 hot_temp = float(temp_array[hot_thermal_y, hot_thermal_x])
-                logger.debug(f"Found hot point in inner search area: {hot_temp:.1f}°C")
-            else:
-                # Fallback: search entire panel but prefer center
-                panel_prefer_center = panel_mask & prefer_inner_mask
-                if panel_prefer_center.any():
-                    hot_temps = np.where(panel_prefer_center, temp_array, -np.inf)
+                logger.debug(f"Found hot point near defect center: {hot_temp:.1f}°C at ({hot_thermal_x}, {hot_thermal_y})")
+            elif prefer_near_defect_mask.any():
+                # Expand to 2x radius if inner search found nothing
+                expanded_mask = prefer_near_defect_mask & panel_mask
+                if expanded_mask.any():
+                    hot_temps = np.where(expanded_mask, temp_array, -np.inf)
+                    hot_idx = np.unravel_index(np.argmax(hot_temps), hot_temps.shape)
+                    hot_thermal_y, hot_thermal_x = hot_idx
+                    hot_temp = float(temp_array[hot_thermal_y, hot_thermal_x])
+                    logger.debug(f"Found hot point in expanded search: {hot_temp:.1f}°C")
                 else:
+                    # Last resort: search within panel mask only
                     hot_temps = np.where(panel_mask, temp_array, -np.inf)
+                    hot_idx = np.unravel_index(np.argmax(hot_temps), hot_temps.shape)
+                    hot_thermal_y, hot_thermal_x = hot_idx
+                    hot_temp = float(temp_array[hot_thermal_y, hot_thermal_x])
+                    logger.debug(f"Found hot point in panel fallback: {hot_temp:.1f}°C")
+            else:
+                # No valid search area - use panel mask
+                hot_temps = np.where(panel_mask, temp_array, -np.inf)
                 hot_idx = np.unravel_index(np.argmax(hot_temps), hot_temps.shape)
                 hot_thermal_y, hot_thermal_x = hot_idx
                 hot_temp = float(temp_array[hot_thermal_y, hot_thermal_x])
@@ -488,6 +489,7 @@ class ThermalAnnotator:
         output_size: Tuple[int, int] = (600, 500),
         panel_bbox_visual: Optional[Tuple[int, int, int, int]] = None,
         flight_direction: Optional[str] = None,
+        hot_search_radius: int = 60,
     ) -> Optional[AnnotatedThermalImage]:
         """
         Create an annotated thermal image centered on the defect with hot/cold markers.
@@ -513,6 +515,9 @@ class ThermalAnnotator:
                               hot/cold search to within the panel only.
             flight_direction: 'south' if drone was flying south (image needs 180° rotation),
                              'north' or None if no rotation needed.
+            hot_search_radius: Radius in VISUAL pixels to search for hottest point around defect center.
+                              Use smaller values (10-20px) for precise backtracking methods (source-map).
+                              Use larger values (60px) for less precise methods (GPS, reprojection).
 
         Returns:
             AnnotatedThermalImage or None if extraction fails
@@ -564,7 +569,7 @@ class ThermalAnnotator:
                 initial_y=int(defect_pixel_y),
                 panel_bbox_visual=panel_bbox_visual,
                 edge_margin=50,  # Exclude 50 visual pixels from edges for cold search (avoid shadows)
-                hot_search_radius=60,  # Search within 60px radius of initial point for hottest
+                hot_search_radius=hot_search_radius,  # Use caller-specified radius
                 image_format=image_format,
                 visual_size=visual_size,
                 flight_direction=flight_direction,  # For thermal array rotation

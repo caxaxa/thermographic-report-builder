@@ -8,6 +8,14 @@ Coordinate System:
 - All coordinates are in THERMAL space (640x512 pixels)
 - These are direct indices into the thermal temperature array
 - Conversion: thermal_x = visual_x * (640/1280), thermal_y = visual_y * (512/1024)
+
+Rotation Handling:
+- Coordinates are stored in ROTATED space (as displayed in the report)
+- The `flight_direction` field indicates if 180° rotation was applied:
+  - 'south': Image was rotated 180° for display (drone flying south)
+  - 'north' or None: No rotation applied
+- For the override UI: if flight_direction is 'south', the image should be
+  displayed rotated 180° to match the coordinate system of the annotations
 """
 
 import json
@@ -40,6 +48,10 @@ class AnnotationEntry(BaseModel):
     cold_point: AnnotationPoint = Field(description="Cold/reference point in thermal coordinates")
     delta_t: float = Field(description="Temperature difference (hot - cold) in Celsius")
     severity: str = Field(description="Severity classification (CRITICAL, ATTENTION, MONITORING)")
+    flight_direction: Optional[str] = Field(
+        default=None,
+        description="Flight direction ('north' or 'south'). If 'south', image needs 180° rotation for display."
+    )
 
 
 class AnnotationManifest(BaseModel):
