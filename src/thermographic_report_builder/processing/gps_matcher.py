@@ -21,6 +21,7 @@ Coordinate spaces:
 """
 
 import csv
+from collections import defaultdict
 import cv2
 import json
 import numpy as np
@@ -59,8 +60,6 @@ _TRACK_COORD_MODES = ("pixel", "norm01", "centered", "centered_max")
 _TRACK_MODE_SAMPLE_LIMIT = 20000
 _TRACK_MAX_SAMPLES_PER_IMAGE = 5000
 _TRACK_MIN_POINTS = 30
-
-
 @dataclass
 class DefectMatch:
     """Result of matching a defect to a raw image."""
@@ -119,9 +118,11 @@ class GPSMatcher:
         self.orientation_map: Dict[str, FlightDirection] = {}  # filename -> flight direction
         self.annotation_entries: List[AnnotationEntry] = []  # Collect annotations for manifest
 
-        # Flag to force GPS-only matching for non-M30T cameras (640x512 thermal-only images)
-        # This is detected during _index_raw_images() based on image dimensions
+        # Flag to force GPS-only matching when reprojection is unsafe (e.g., size mismatch).
+        # This is detected during _index_raw_images() based on image dimensions vs reconstruction.
         self._use_gps_fallback = False
+        # Track whether raw images are thermal-only (e.g., M3T 640x512) for coordinate alignment.
+        self._thermal_only_images = False
         self._detected_image_width = None
         self._detected_image_height = None
 
@@ -184,7 +185,7 @@ class GPSMatcher:
         Returns:
             Tuple of (number of images matched, dict of panel_id -> DefectMatch)
         """
-        # Download and index all raw images by GPS (also detects non-M30T images)
+        # Download and index all raw images by GPS (also detects thermal-only images)
         self._index_raw_images(temp_dir)
 
         if not self.image_cache:
@@ -196,6 +197,7 @@ class GPSMatcher:
 
         matched_count = 0
         defect_matches: Dict[str, DefectMatch] = {}
+        hotspot_exclusions: Dict[Tuple[str, str], List[Tuple[int, int]]] = defaultdict(list)
 
         # Determine matching method: source_map > mesh > reprojection > GPS
         use_source_map = (
@@ -213,9 +215,11 @@ class GPSMatcher:
         logger.info(f"Matching raw thermal images to defects via {method}")
 
         if use_source_map:
-            logger.info("Using ODM source-map for authoritative ortho->raw pixel mapping")
+            logger.info("Fallback chain: source map (primary) -> camera reprojection/GPS -> mesh (last resort)")
         elif use_mesh_backtrack:
-            logger.info("Using deterministic mesh backtracking for ortho->raw mapping")
+            logger.info("Fallback chain: camera reprojection/GPS -> mesh (last resort) - source map disabled")
+        else:
+            logger.info("Fallback chain: camera reprojection/GPS only - source map and mesh disabled")
 
         # Compute per-image calibration offsets from tracks.csv if available
         if self.tracks_path:
@@ -251,7 +255,11 @@ class GPSMatcher:
 
                     defect_lon, defect_lat = self.geo_converter.pixel_to_lonlat((uncropped_x, uncropped_y))
 
-                    # STEP 1: Try source-map first (authoritative), then mesh, then camera projection
+                    # FALLBACK CHAIN: source map -> camera reprojection/GPS -> mesh (last resort)
+                    # Mesh is demoted to last because:
+                    # 1. Redundant with source map (both use centrality scoring)
+                    # 2. Requires large artifacts (100MB+) causing bandwidth costs
+                    # 3. Disabled by default via ENABLE_MESH_FALLBACK setting
                     match = None
                     mesh_result = None
                     mesh_used = False
@@ -268,9 +276,15 @@ class GPSMatcher:
                         if source_map_result and source_map_result.image_name:
                             # Found authoritative mapping from source-map
                             image_path = temp_dir / source_map_result.image_name
-                            if image_path.exists():
+                            if not image_path.exists():
+                                image_path = self._ensure_raw_image_downloaded(
+                                    source_map_result.image_name,
+                                    temp_dir,
+                                )
+                            if image_path and image_path.exists():
+                                resolved_name = image_path.name
                                 match = DefectMatch(
-                                    image_name=source_map_result.image_name,
+                                    image_name=resolved_name,
                                     image_path=image_path,
                                     method="source_map",
                                     pixel_x=float(source_map_result.raw_pixel_x),
@@ -279,7 +293,7 @@ class GPSMatcher:
                                 self.stats["source_map_success"] += 1
                                 logger.info(
                                     f"Source-map match: ortho=({uncropped_x:.0f},{uncropped_y:.0f}) -> "
-                                    f"{source_map_result.image_name} at ({source_map_result.raw_pixel_x}, {source_map_result.raw_pixel_y})"
+                                    f"{resolved_name} at ({source_map_result.raw_pixel_x}, {source_map_result.raw_pixel_y})"
                                 )
                             else:
                                 logger.warning(f"Source-map image not found: {source_map_result.image_name}")
@@ -287,17 +301,7 @@ class GPSMatcher:
                         else:
                             self.stats["source_map_failed"] += 1
 
-                    # SECONDARY: Mesh backtracking (if source-map failed and mesh available)
-                    # Uses uncropped coordinates since mesh is aligned to uncropped geo-transform
-                    if match is None and use_mesh_backtrack:
-                        mesh_result = self.mesh_backtracker.backtrack(
-                            ortho_x=uncropped_x,
-                            ortho_y=uncropped_y,
-                        )
-                        if not mesh_result:
-                            self.stats["mesh_backtrack_failed"] += 1
-
-                    # Secondary: temperature-scored matching (only if mesh backtracking unavailable)
+                    # SECONDARY: Temperature-scored matching for hotspots
                     if (
                         match is None
                         and create_thermal_analysis
@@ -317,11 +321,15 @@ class GPSMatcher:
                                 f"{match.image_name} via {match.method}"
                             )
 
-                    # Fallback to GPS matching if temperature scoring didn't work
+                    # TERTIARY: GPS + camera reprojection fallback
                     if not match:
                         # For non-M30T (thermal-only), use temperature-scored GPS
                         # to pick the best candidate from multiple nearby images
-                        if self._use_gps_fallback and self.thermal_extractor and self.thermal_extractor.available:
+                        if (
+                            (self._thermal_only_images or self._use_gps_fallback)
+                            and self.thermal_extractor
+                            and self.thermal_extractor.available
+                        ):
                             closest_image = self._find_best_image_by_temperature(defect_lat, defect_lon)
                         else:
                             closest_image = self._find_closest_image(defect_lat, defect_lon)
@@ -332,7 +340,7 @@ class GPSMatcher:
                         image_path = Path(closest_image["path"])
                         image_name = image_path.name
 
-                        # Try camera reprojection to get pixel coordinates (skip for non-M30T)
+                        # Try camera reprojection to get pixel coordinates (skip if reprojection disabled)
                         # Uses uncropped coordinates for projection
                         pixel_x, pixel_y = None, None
                         if self.camera_projector.available and not self._use_gps_fallback:
@@ -356,9 +364,15 @@ class GPSMatcher:
                         else:
                             self.stats["fallback_gps"] += 1
 
-                    # If we have a mesh hit but no match selected, fall back to mesh view
-                    if match is None and mesh_result:
-                        if mesh_result.image_name:
+                    # LAST RESORT: Mesh backtracking (disabled by default via ENABLE_MESH_FALLBACK=False)
+                    # Demoted to last because it's redundant with source map (both use centrality scoring)
+                    # and requires large artifacts (100MB+) causing bandwidth costs.
+                    if match is None and use_mesh_backtrack:
+                        mesh_result = self.mesh_backtracker.backtrack(
+                            ortho_x=uncropped_x,
+                            ortho_y=uncropped_y,
+                        )
+                        if mesh_result and mesh_result.image_name:
                             image_path = temp_dir / mesh_result.image_name
                             if image_path.exists():
                                 mesh_pixel = self._project_mesh_point_to_image(
@@ -384,6 +398,10 @@ class GPSMatcher:
                                     )
                                     self.stats["mesh_backtrack_success"] += 1
                                     mesh_used = True
+                                    logger.info(
+                                        f"Mesh fallback (last resort): ortho=({uncropped_x:.0f},{uncropped_y:.0f}) -> "
+                                        f"{mesh_result.image_name} at ({mesh_pixel[0]}, {mesh_pixel[1]})"
+                                    )
                                 else:
                                     self.stats["mesh_backtrack_failed"] += 1
                             else:
@@ -391,23 +409,27 @@ class GPSMatcher:
                         else:
                             self.stats["mesh_backtrack_failed"] += 1
 
-                    # If a match exists and mesh hit is available, reproject using mesh world point
-                    if match is not None and mesh_result and not mesh_used:
-                        mesh_pixel = self._project_mesh_point_to_image(
-                            mesh_result, match.image_name
-                        )
-                        if mesh_pixel is not None:
-                            match.pixel_x, match.pixel_y = mesh_pixel
-                            match.method = "mesh"
-                            self.stats["mesh_backtrack_success"] += 1
-                            mesh_used = True
-                        else:
-                            self.stats["mesh_backtrack_failed"] += 1
-
                     if match:
                         # Get the source filename to check orientation
                         src_filename = match.image_name
                         flight_dir = self.orientation_map.get(src_filename)
+
+                        # If no match found, try looking up with common extensions
+                        # This handles the case where NVM strips extensions but orientation_map uses full filenames
+                        if flight_dir is None and "." not in src_filename:
+                            for ext in [".JPG", ".jpg", ".JPEG", ".jpeg", ".png", ".PNG", ".tif", ".TIF"]:
+                                flight_dir = self.orientation_map.get(src_filename + ext)
+                                if flight_dir is not None:
+                                    logger.debug(f"Found flight direction via extension lookup: {src_filename + ext} -> {flight_dir}")
+                                    break
+
+                        # Log if we couldn't find flight direction
+                        if flight_dir is None:
+                            logger.debug(
+                                f"Could not find flight direction for {src_filename}. "
+                                f"orientation_map has {len(self.orientation_map)} entries, "
+                                f"sample keys: {list(self.orientation_map.keys())[:3]}"
+                            )
 
                         # Store original (unrotated) pixel coordinates for raw file operations
                         original_pixel_x = match.pixel_x
@@ -475,7 +497,7 @@ class GPSMatcher:
                             if should_refine:
                                 try:
                                     from ..utils.thermal_alignment import ImageFormat
-                                    image_format = ImageFormat.THERMAL_ONLY if self._use_gps_fallback else ImageFormat.VISUAL_THERMAL
+                                    image_format = ImageFormat.THERMAL_ONLY if self._thermal_only_images else ImageFormat.VISUAL_THERMAL
                                     visual_size = None
                                     if self._detected_image_width and self._detected_image_height:
                                         visual_size = (self._detected_image_width, self._detected_image_height)
@@ -514,7 +536,7 @@ class GPSMatcher:
 
                             # Extract temperature data
                             from ..utils.thermal_alignment import ImageFormat
-                            image_format = ImageFormat.THERMAL_ONLY if self._use_gps_fallback else ImageFormat.VISUAL_THERMAL
+                            image_format = ImageFormat.THERMAL_ONLY if self._thermal_only_images else ImageFormat.VISUAL_THERMAL
                             visual_size = None
                             if self._detected_image_width and self._detected_image_height:
                                 visual_size = (self._detected_image_width, self._detected_image_height)
@@ -636,6 +658,9 @@ class GPSMatcher:
                                 else:
                                     hot_search_radius = 60  # Default for less precise methods
 
+                                exclusion_key = (panel.panel_id, match.image_name)
+                                excluded_hot_points = hotspot_exclusions.get(exclusion_key)
+
                                 annotated = self.thermal_annotator.create_annotated_image(
                                     raw_image_path=match.image_path,
                                     defect_pixel_x=original_pixel_x,
@@ -649,9 +674,22 @@ class GPSMatcher:
                                     panel_bbox_visual=panel_bbox_visual,  # Constrain search to panel
                                     flight_direction=flight_dir,  # For image rotation
                                     hot_search_radius=hot_search_radius,  # Match refinement radius
+                                    excluded_hot_points=excluded_hot_points,
+                                    min_hot_distance=10,
                                 )
 
                                 if annotated:
+                                    raw_hot_x = annotated.hot_cold.hot_x
+                                    raw_hot_y = annotated.hot_cold.hot_y
+                                    if flight_dir == "south":
+                                        img_w = self._detected_image_width or 1280
+                                        img_h = self._detected_image_height or 1024
+                                        raw_hot_x = img_w - 1 - raw_hot_x
+                                        raw_hot_y = img_h - 1 - raw_hot_y
+                                    hotspot_exclusions[exclusion_key].append(
+                                        (int(raw_hot_x), int(raw_hot_y))
+                                    )
+
                                     # Save annotated image with defect index if multiple defects
                                     defect_type_str = defect_type.replace("_", "")
                                     if len(defects) > 1:
@@ -686,7 +724,7 @@ class GPSMatcher:
                                     # Convert visual coords to thermal coords for manifest
                                     # For non-M30T (thermal-only), coords are already thermal - skip transformation
                                     from ..utils.thermal_alignment import visual_to_thermal, ImageFormat
-                                    image_format = ImageFormat.THERMAL_ONLY if self._use_gps_fallback else ImageFormat.VISUAL_THERMAL
+                                    image_format = ImageFormat.THERMAL_ONLY if self._thermal_only_images else ImageFormat.VISUAL_THERMAL
                                     visual_size = None
                                     if self._detected_image_width and self._detected_image_height:
                                         visual_size = (self._detected_image_width, self._detected_image_height)
@@ -734,6 +772,7 @@ class GPSMatcher:
                                         ),
                                         delta_t=annotated.hot_cold.hot_temp - annotated.hot_cold.cold_temp,
                                         severity=annotated.severity,
+                                        flight_direction=flight_dir,  # For UI rotation
                                     )
                                     self.annotation_entries.append(entry)
                                 else:
@@ -781,7 +820,7 @@ class GPSMatcher:
         Returns:
             DefectMatch or None
         """
-        # Try camera reprojection first (skip for non-M30T images)
+        # Try camera reprojection first (skip if reprojection disabled)
         if self.camera_projector.available and not self._use_gps_fallback:
             # Get ALL candidate matches (not just the "best" by centrality)
             all_matches = self.camera_projector.project_ortho_to_raw(ortho_x, ortho_y)
@@ -806,7 +845,7 @@ class GPSMatcher:
                         # Convert from visual to thermal coordinates using detected dimensions
                         # For non-M30T (thermal-only), coords are already thermal - skip transformation
                         from ..utils.thermal_alignment import visual_to_thermal, clamp_thermal_coords, ImageFormat
-                        image_format = ImageFormat.THERMAL_ONLY if self._use_gps_fallback else ImageFormat.VISUAL_THERMAL
+                        image_format = ImageFormat.THERMAL_ONLY if self._thermal_only_images else ImageFormat.VISUAL_THERMAL
                         visual_size = None
                         if self._detected_image_width and self._detected_image_height:
                             visual_size = (self._detected_image_width, self._detected_image_height)
@@ -1242,24 +1281,46 @@ class GPSMatcher:
                     self.image_cache[filename] = exif
                     logger.debug(f"Indexed {filename}: GPS ({exif['latitude']}, {exif['longitude']})")
 
-                    # Detect image dimensions on first image to check for non-M30T cameras
+                    # Detect image dimensions on first image to identify thermal-only cameras
                     if self._detected_image_width is None and "width" in exif and "height" in exif:
                         self._detected_image_width = exif["width"]
                         self._detected_image_height = exif["height"]
 
-                        # M30T images are 1280x1024, non-M30T thermal-only are typically 640x512
-                        # If not 1280x1024, use GPS fallback since reconstruction was built for M30T
+                        # M30T images are 1280x1024, thermal-only are typically 640x512
                         if self._detected_image_width != 1280 or self._detected_image_height != 1024:
-                            self._use_gps_fallback = True
-                            logger.warning(
-                                f"Detected non-M30T images ({self._detected_image_width}x{self._detected_image_height}). "
-                                f"Disabling camera reprojection, using GPS-only matching."
+                            self._thermal_only_images = True
+                            logger.info(
+                                f"Detected thermal-only images ({self._detected_image_width}x{self._detected_image_height}). "
+                                f"Using thermal-only alignment."
                             )
                         else:
                             logger.info(
-                                f"Detected M30T images ({self._detected_image_width}x{self._detected_image_height}). "
-                                f"Using camera reprojection."
+                                f"Detected M30T images ({self._detected_image_width}x{self._detected_image_height})."
                             )
+
+                        # Disable reprojection only if reconstruction camera size mismatches raw images
+                        if self.camera_projector.available:
+                            camera_model = next(iter(getattr(self.camera_projector, "cameras", {}).values()), {})
+                            cam_width = camera_model.get("width")
+                            cam_height = camera_model.get("height")
+
+                            if cam_width and cam_height:
+                                if cam_width != self._detected_image_width or cam_height != self._detected_image_height:
+                                    self._use_gps_fallback = True
+                                    logger.warning(
+                                        "Reprojection disabled due to size mismatch: "
+                                        f"reconstruction {cam_width}x{cam_height} vs raw "
+                                        f"{self._detected_image_width}x{self._detected_image_height}. "
+                                        "Using GPS-only matching."
+                                    )
+                                else:
+                                    logger.info(
+                                        "Reprojection enabled: reconstruction camera size matches raw images."
+                                    )
+                            else:
+                                logger.info(
+                                    "Reprojection enabled: reconstruction camera dimensions unavailable for validation."
+                                )
 
             except Exception as e:
                 logger.warning(f"Failed to process {filename}: {e}")
@@ -1270,6 +1331,41 @@ class GPSMatcher:
                 logger.info(f"Indexed {idx}/{len(raw_image_keys)} images ({len(self.image_cache)} with GPS)")
 
         logger.info(f"Indexed {len(self.image_cache)} images with GPS data")
+
+    def _ensure_raw_image_downloaded(self, image_name: str, temp_dir: Path) -> Optional[Path]:
+        """Attempt to download a missing raw image by filename."""
+        if not image_name:
+            return None
+
+        candidates = [image_name]
+        suffix = Path(image_name).suffix.lower()
+        if not suffix:
+            candidates.extend([f"{image_name}.JPG", f"{image_name}.jpg"])
+        elif suffix == ".tif":
+            base = image_name[:-4]
+            candidates.extend([base, f"{base}.JPG", f"{base}.jpg"])
+
+        last_error = None
+        for candidate in candidates:
+            local_path = temp_dir / candidate
+            if local_path.exists():
+                return local_path
+            s3_key = f"{settings.user_id}/projects/{settings.project_id}/images/{candidate}"
+            try:
+                self.s3_client.download_raw_image(s3_key, local_path)
+                if local_path.exists():
+                    logger.info(f"Downloaded missing raw image for source-map match: {candidate}")
+                    return local_path
+            except Exception as e:
+                last_error = e
+                continue
+
+        if last_error is not None:
+            logger.warning(
+                f"Failed to download raw image for source-map match: {image_name}",
+                error=str(last_error),
+            )
+        return None
 
     def _find_closest_image(self, target_lat: float, target_lon: float) -> dict | None:
         """
@@ -1555,7 +1651,7 @@ class GPSMatcher:
                     # Convert thermal coords to visual coords for zoombox
                     # For non-M30T (thermal-only), coords are already thermal - skip transformation
                     from ..utils.thermal_alignment import thermal_to_visual, ImageFormat
-                    image_format = ImageFormat.THERMAL_ONLY if self._use_gps_fallback else ImageFormat.VISUAL_THERMAL
+                    image_format = ImageFormat.THERMAL_ONLY if self._thermal_only_images else ImageFormat.VISUAL_THERMAL
                     visual_size = None
                     thermal_size = None
                     try:

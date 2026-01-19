@@ -81,9 +81,12 @@ class SourceMapBacktracker:
                 # Store transform for coordinate conversion
                 self.transform = src.transform
 
+            valid_pixels = int(
+                np.sum(~np.isnan(self.view_ids) & (self.view_ids != self.INVALID_VIEW_ID))
+            )
             logger.info(
                 f"Loaded source-map: {self.width}x{self.height}, "
-                f"valid pixels: {np.sum(self.view_ids != self.INVALID_VIEW_ID)}"
+                f"valid pixels: {valid_pixels}"
             )
         except Exception as e:
             logger.warning(f"Failed to load source-map: {e}")
@@ -171,7 +174,7 @@ class SourceMapBacktracker:
         view_id_val = self.view_ids[row, col]
 
         # Check for invalid pixel (NaN for float32, 65535 for legacy uint16)
-        if np.isnan(view_id_val) or view_id_val == self.INVALID_VIEW_ID or view_id_val == 0:
+        if np.isnan(view_id_val) or view_id_val == self.INVALID_VIEW_ID:
             logger.debug(f"Invalid view_id at ({col}, {row}): {view_id_val}")
             return None
 
@@ -244,7 +247,7 @@ class SourceMapBacktracker:
                     continue
 
                 view_id_val = self.view_ids[r, c]
-                if np.isnan(view_id_val) or view_id_val == self.INVALID_VIEW_ID or view_id_val == 0:
+                if np.isnan(view_id_val) or view_id_val == self.INVALID_VIEW_ID:
                     continue
 
                 view_id = int(view_id_val)
@@ -267,7 +270,9 @@ class SourceMapBacktracker:
         # Get the most common view_id
         best_view_id = results.most_common(1)[0][0]
 
-        # Find a pixel with this view_id to get raw coordinates
+        # Find the closest pixel with this view_id to get raw coordinates
+        best_dist = None
+        best_coords = None
         for dy in range(-search_radius, search_radius + 1):
             for dx in range(-search_radius, search_radius + 1):
                 c = col + dx
@@ -282,21 +287,28 @@ class SourceMapBacktracker:
                     raw_y = float(self.raw_y[r, c])
                     if np.isnan(raw_x) or np.isnan(raw_y):
                         continue
-                    image_name = self.view_id_to_name.get(best_view_id)
+                    dist = dx * dx + dy * dy
+                    if best_dist is None or dist < best_dist:
+                        best_dist = dist
+                        best_coords = (raw_x, raw_y)
 
-                    logger.debug(
-                        f"Source-map search hit: ortho=({col}, {row}) radius={search_radius} -> "
-                        f"view_id={best_view_id}, raw=({raw_x}, {raw_y}), image={image_name}"
-                    )
+        if best_coords is None:
+            return None
 
-                    return SourceMapResult(
-                        view_id=best_view_id,
-                        raw_pixel_x=raw_x,
-                        raw_pixel_y=raw_y,
-                        image_name=image_name,
-                    )
+        raw_x, raw_y = best_coords
+        image_name = self.view_id_to_name.get(best_view_id)
 
-        return None
+        logger.debug(
+            f"Source-map search hit: ortho=({col}, {row}) radius={search_radius} -> "
+            f"view_id={best_view_id}, raw=({raw_x}, {raw_y}), image={image_name}"
+        )
+
+        return SourceMapResult(
+            view_id=best_view_id,
+            raw_pixel_x=raw_x,
+            raw_pixel_y=raw_y,
+            image_name=image_name,
+        )
 
     def get_coverage_stats(self) -> Dict[str, int]:
         """Get coverage statistics for the source-map."""
@@ -305,7 +317,7 @@ class SourceMapBacktracker:
 
         total = self.width * self.height
         # Count valid pixels (not NaN and not INVALID_VIEW_ID)
-        valid = int(np.sum(~np.isnan(self.view_ids) & (self.view_ids != self.INVALID_VIEW_ID) & (self.view_ids != 0)))
+        valid = int(np.sum(~np.isnan(self.view_ids) & (self.view_ids != self.INVALID_VIEW_ID)))
 
         return {
             "available": True,

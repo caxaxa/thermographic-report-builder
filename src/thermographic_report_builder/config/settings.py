@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     thermal_visual_offset_x: float = 0.0  # Horizontal offset (visual pixels)
     thermal_visual_offset_y: float = 0.0  # Vertical offset (visual pixels)
 
+    # ===== Mesh Backtracking Configuration =====
+    # Mesh backtracking is disabled by default to save bandwidth (mesh artifacts are 100MB+).
+    # Mesh uses the same centrality-based camera selection as source map (redundant) and is
+    # demoted to last-resort fallback after source map, camera reprojection, and GPS methods.
+    # Enable only if you need the mesh fallback for edge cases where other methods fail.
+    enable_mesh_fallback: bool = False
+
     # ===== Logging =====
     log_level: str = "INFO"
     log_json: bool = True  # JSON format for CloudWatch

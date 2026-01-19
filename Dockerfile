@@ -5,6 +5,8 @@ FROM python:3.11-slim as builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     git \
+    gdal-bin \
+    libgdal-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies
@@ -44,6 +46,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libimage-exiftool-perl \
     # libgomp for DJI Thermal SDK (OpenMP parallel processing)
     libgomp1 \
+    # GDAL for flight visualization (GeoTIFF parsing)
+    gdal-bin \
+    libgdal36 \
     && mktexlsr \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean

@@ -144,13 +144,15 @@ class S3Client:
         logger.info(f"Listing thermal images from s3://{bucket}/{prefix}")
 
         try:
-            response = self.s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
-
-            keys = [
-                obj["Key"]
-                for obj in response.get("Contents", [])
-                if obj["Key"].endswith("_T.JPG")
-            ]
+            keys = []
+            paginator = self.s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    key = obj.get("Key")
+                    if not key:
+                        continue
+                    if key.lower().endswith("_t.jpg"):
+                        keys.append(key)
 
             logger.info(f"Found {len(keys)} thermal images in uploads bucket")
             return keys

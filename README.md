@@ -52,12 +52,20 @@ thermographic_report_builder/
 - Mockable I/O layer
 - Unit test ready
 
+### ✅ Flight Data Visualization
+- Automated flight appendix with mission statistics
+- GPS prediction error analysis (bundle adjustment quality)
+- Interactive and static flight path maps
+- Altitude and speed profile charts
+- See [Flight Appendix Documentation](docs/FLIGHT_APPENDIX.md)
+
 ## Input/Output
 
 ### Inputs (from S3)
 - **Orthophoto**: `s3://solar-orthos-{env}/{user}/projects/{project}/odm_orthophoto.tif`
 - **Defect Labels**: `s3://solar-reports-{env}/{user}/projects/{project}/defect_labels.json`
 - **Raw Thermal Images**: `s3://solar-uploads-{env}/{user}/projects/{project}/images/*.JPG`
+- **(Optional) Reconstruction Data**: `s3://solar-orthos-{env}/{user}/projects/{project}/opensfm/reconstruction.json` - For flight appendix
 - **(Optional) ODM Stats**: `s3://solar-intermediate-{env}/{user}/projects/{project}/odm/stats/`
 
 #### Defect Labels Schema
@@ -226,16 +234,57 @@ const reportBuilderJob = new batch.JobDefinition(this, 'ReportBuilderJob', {
 
 ## Processing Pipeline
 
-1. **Download Inputs** - Fetch orthophoto, labels, and raw images from S3
+1. **Download Inputs** - Fetch orthophoto, labels, raw images, and reconstruction data from S3
 2. **Parse Data** - Load GeoTIFF and defect labels JSON
 3. **Map Defects** - Assign defects to panel grid using spatial algorithms
 4. **Annotate Orthophoto** - Draw bounding boxes on overview image
 5. **Create Layer Map** - Generate vectorized PDF with panel grid
 6. **Crop Defect Regions** - Extract detailed views of each defect
-7. **Match GPS Images** - Find closest raw thermal image for each defect (with north-orientation)
-8. **Generate PDF** - Create LaTeX document and compile to PDF
-9. **Export Metrics** - Calculate statistics and export to JSON/CSV
-10. **Upload Results** - Push all artifacts to S3
+7. **Match Raw Thermal Images** - Use source-map backtracking to find exact pixel coordinates in raw thermal images
+8. **Annotate Thermal Images** - Draw hot/cold markers on raw thermal images with temperature readings
+9. **Generate Flight Appendix** - Calculate flight metrics and create visualizations (if reconstruction.json available)
+10. **Generate PDF** - Create LaTeX document and compile to PDF
+11. **Export Metrics** - Calculate statistics and export to JSON/CSV
+12. **Upload Results** - Push all artifacts to S3
+
+## Raw Thermal Image Backtracking
+
+The report builder uses a sophisticated **source-map backtracking** system to locate defects in raw thermal images. This is critical for professional reports that need to show the actual thermal anomaly on the original drone footage.
+
+### How It Works
+
+1. **ODM Source-Map**: During orthophoto generation, a patched ODM pipeline generates `odm_orthophoto_sources.tif` - a GeoTIFF that maps each orthophoto pixel to its source raw image and pixel coordinates (Float32 precision).
+
+2. **Coordinate Transform Chain**:
+   ```
+   Defect on Cropped Orthophoto
+         ↓ Inverse rotation + crop offset
+   Resampled Orthophoto Pixel
+         ↓ ÷ resample scale factor
+   Full Orthophoto Pixel
+         ↓ Source-map lookup
+   Raw Image + Pixel Coordinates
+   ```
+
+3. **Camera Projection**: The source-map uses camera projection from `reconstruction.nvm` to compute sub-pixel accurate coordinates through the textured 3D mesh.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `processing/source_map_backtracker.py` | Loads source-map GeoTIFF, performs coordinate lookups |
+| `processing/crop_transform.py` | Reverses crop/rotation transforms |
+| `processing/camera_projector.py` | Projects panel corners to raw image for bounding box |
+| `processing/gps_matcher.py` | Orchestrates matching, downloads raw images |
+| `processing/thermal_annotator.py` | Draws hot/cold markers, extracts temperatures |
+
+### Fallback Chain
+
+If source-map backtracking fails, the system falls back to:
+1. **Reconstruction.json camera reprojection** - Uses OpenSfM camera poses
+2. **GPS proximity matching** - Finds closest image by GPS distance
+
+See `docs/THERMAL_BACKTRACKING_ARCHITECTURE.md` for complete technical details.
 
 ## Panel Numbering System
 
@@ -311,6 +360,45 @@ This ordering applies to both the summary table and the detailed sections.
 | Wrong panel numbering | Panel annotations not aligned or tolerances off | Check that panels are properly aligned in annotation tool; adjust `COLUMN_TOLERANCE` or `TRACKER_GAP_THRESHOLD` if needed |
 | Images not rotated correctly | Flight path not purely north/south | The rotation algorithm assumes linear north/south flight paths; complex flight patterns may need manual review |
 | All images rotated same direction | Single-direction flight | This is expected behavior for a single-pass flight; the algorithm correctly detects consistent flight direction |
+| Hot marker on vegetation instead of panel | Panel bbox includes surrounding vegetation | Known limitation - see Hot Point Detection section below |
+| Blue cross (cold point) missing | Cold point coordinates invalid or off-image | Check logs for cold point calculation errors |
+| Source-map backtracking fails | Source-map not generated or corrupted | Re-run ODM processing with patched image to regenerate `odm_orthophoto_sources.tif` |
+| Defect coordinates outside panel bbox | Coordinate transform chain mismatch | Enable DEBUG logging to trace coordinate transformations |
+| "Erro ao gerar visualizações de voo" in report | reconstruction.json missing or malformed | Verify ODM job completed successfully and uploaded reconstruction.json to S3; see [Flight Appendix Troubleshooting](docs/FLIGHT_APPENDIX.md#troubleshooting) |
+| NaN values in flight statistics | Coordinate conversion issue (ENU vs WGS84) | Check that latitude values are -90 to +90 (not -94 to +95); ensure ENU to WGS84 conversion is applied |
+| GPS error metric missing | GPS error calculation not implemented | Verify FlightMetrics includes mean_gps_error and max_gps_error fields |
+
+## Hot Point Detection Algorithm
+
+The thermal annotator identifies the hottest and coldest points within each panel for temperature delta calculations.
+
+### Algorithm Overview
+
+1. **Panel Bbox Projection**: Panel corners from the orthophoto are projected onto the raw thermal image using camera parameters from `reconstruction.json`
+2. **Visual-to-Thermal Coordinate Mapping**: Coordinates are converted from visual (1280x1024) to thermal (640x512) space with alignment offset
+3. **Hot Point Search**: Find the hottest pixel within a search radius around the defect center, constrained to the panel bbox
+4. **Cold Point Search**: Find the coldest pixel within the panel interior (excluding edges to avoid shadow artifacts)
+5. **Temperature Extraction**: Use DJI thermal SDK to read actual temperature values from the R-JPEG thermal data
+
+### Known Limitations
+
+**Panel Bbox vs Actual Panel**: The projected panel bounding box may include surrounding vegetation or other hot objects. The algorithm searches for the hottest pixel within this bbox, which may land on vegetation rather than the actual panel hotspot.
+
+**Attempted Fixes That Didn't Work**:
+- Temperature-based vegetation filtering (vegetation and panel hotspots have similar temperatures)
+- Visual brightness thresholding (whitehot thermal images show vegetation as bright, panels as dark)
+- Fixed brightness threshold filtering (threshold of 100 excluded too many valid panel pixels)
+
+**Current Behavior**: The algorithm finds the hottest point within the panel bbox. If vegetation is included in the bbox and is thermally hotter than the panel defect, the marker may land on vegetation.
+
+**Future Improvement Ideas**:
+1. Use semantic segmentation to identify actual panel pixels
+2. Use panel mask from detection model instead of projected bbox
+3. Multi-scale hotspot detection with local maxima filtering
+
+### Flight Direction Handling
+
+For south-facing flights, both the thermal array and visual image are rotated 180° to maintain consistent coordinate systems. This is critical for accurate hot/cold point detection.
 
 ## Monitoring
 

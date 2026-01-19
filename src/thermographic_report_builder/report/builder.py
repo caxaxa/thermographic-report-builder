@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Dict, Optional, Tuple
+import re
 from datetime import datetime
 import subprocess
 
@@ -137,6 +138,21 @@ class ReportBuilder:
             error_msg = f"Failed to generate PDF: {e}"
             logger.error(error_msg)
             raise ReportGenerationError(error_msg) from e
+
+    def _panel_sort_key(self, panel: Panel) -> Tuple[int, int, str]:
+        panel_id = panel.panel_id or ""
+        # Handle both "1-8A" and "Painel 1-8A" formats
+        match = re.match(r"^(?:Painel\s+)?(\d+)-(\d+)([A-Za-z]*)$", panel_id)
+        if match:
+            first = int(match.group(1))
+            second = int(match.group(2))
+            suffix = match.group(3) or ""
+            return (first, second, suffix)
+
+        suffix = panel.double_suffix or (panel.tracker if panel.tracker != "A" else "")
+        if panel.is_horizontal:
+            return (panel.row, panel.column, suffix)
+        return (panel.column, panel.tracker_column, suffix)
 
     def _create_latex_document(self) -> pl.Document:
         """Create LaTeX document with report content."""
@@ -420,8 +436,8 @@ RoyalBlue]
         if not self.panels_with_defects:
             return
 
-        # Flatten panel defects into list of (defect_type_order, defect_label, column, row, panel_id, coords)
-        # Order: by defect class, then by column, then by row
+        # Flatten panel defects into list of (defect_type_order, panel_key, defect_label, panel_id, coords)
+        # Order: by defect class, then by panel identifier order
         defect_rows = []
         defect_type_order = {
             "hotspots": (0, "Pontos Quentes (Hot Spots)"),
@@ -430,18 +446,19 @@ RoyalBlue]
         }
 
         for panel in self.panels_with_defects:
+            panel_key = self._panel_sort_key(panel)
             for defect_type_attr, (order, defect_label) in defect_type_order.items():
                 defects = getattr(panel, defect_type_attr, [])
                 for defect in defects:
                     coords = defect.panel_centroid_geospatial
                     coords_str = f"({coords.latitude:.6f}, {coords.longitude:.6f})"
-                    defect_rows.append((order, defect_label, panel.column, panel.row, panel.panel_id, coords_str))
+                    defect_rows.append((order, panel_key, defect_label, panel.panel_id, coords_str))
 
-        # Sort by: defect class (order), then column, then row
-        defect_rows.sort(key=lambda x: (x[0], x[2], x[3]))
+        # Sort by: defect class (order), then panel order
+        defect_rows.sort(key=lambda x: (x[0], x[1]))
 
         # Extract display fields (defect_label, panel_id, coords_str)
-        defect_rows = [(r[1], r[4], r[5]) for r in defect_rows]
+        defect_rows = [(r[2], r[3], r[4]) for r in defect_rows]
 
         # Create tables with max 35 rows each (for pagination)
         rows_per_table = 35
@@ -491,7 +508,7 @@ RoyalBlue]
             if panels_with_type:
                 doc.append(intro_text + "\n\n")
 
-                for panel in sorted(panels_with_type, key=lambda p: (p.column, p.row)):
+                for panel in sorted(panels_with_type, key=self._panel_sort_key):
                     self._add_panel_defect_by_type(doc, panel, defect_attr, panel_text_template)
             else:
                 # No defects of this type
@@ -661,7 +678,7 @@ RoyalBlue]
                 f"Total de {len(self.panels_with_defects)} painéis com defeitos identificados.\n\n"
             )
 
-            for panel in sorted(self.panels_with_defects, key=lambda p: (p.column, p.row)):
+            for panel in sorted(self.panels_with_defects, key=self._panel_sort_key):
                 self._add_panel_defect_page(doc, panel)
 
     def _add_panel_defect_page(self, doc: pl.Document, panel: Panel) -> None:
@@ -815,59 +832,101 @@ RoyalBlue]
             return output_path
 
     def _add_appendix(self, doc: pl.Document) -> None:
-        """Add appendix with flight data and ODM statistics."""
-        if not self.odm_stats or not self.odm_stats_dir:
-            logger.info("Skipping appendix - ODM stats not available")
-            return
-
-        logger.info("Adding appendix with ODM statistics")
+        """Add appendix with flight data and orthophoto information."""
+        logger.info("Adding appendix with flight and orthophoto information")
 
         doc.append(NoEscape(r"\newpage"))
         doc.append(NoEscape(r"\appendix"))
 
         # Appendix A: Drone and Flight Information
-        doc.append(NoEscape(r"\section{Informações do Drone e Voo}"))
+        doc.append(NoEscape(r"\section{Informações do Voo e Ortofoto}"))
 
-        # Add topview if available
-        topview_path = self.odm_stats_dir / "topview.png"
-        if topview_path.exists():
-            # Copy topview to images directory for LaTeX access
-            import shutil
-            dest_path = self.images_dir / "topview.png"
-            shutil.copy(topview_path, dest_path)
+        # Try to generate flight visualizations from reconstruction.json
+        try:
+            from ..flight_viz.integration import generate_flight_appendix
 
-            with doc.create(pl.Figure(position="h!")) as fig:
-                fig.add_image("report_images/topview.png", width=NoEscape(r"0.8\textwidth"))
-                fig.add_caption("Trajetória de Voo do Drone")
+            # images_dir = work_dir / "report_images", so images_dir.parent = work_dir
+            work_dir = self.images_dir.parent
 
-        doc.append("Informações do voo do drone e processamento.")
+            # Check if reconstruction.json exists (downloaded in main.py STEP 7)
+            reconstruction_path = work_dir / "reconstruction.json"
+            if not reconstruction_path.exists():
+                # Fallback to opensfm subdirectory (legacy location)
+                reconstruction_path = work_dir / "opensfm" / "reconstruction.json"
 
-        # Processing Statistics Table
-        if "processing_statistics" in self.odm_stats:
-            self._add_processing_stats_table(doc, self.odm_stats["processing_statistics"])
+            if not reconstruction_path.exists():
+                raise FileNotFoundError(f"reconstruction.json not found at {reconstruction_path}")
+
+            # Find orthophoto for background overlay
+            orthophoto_path = work_dir / "odm_orthophoto.tif"
+            if not orthophoto_path.exists():
+                # Try alternate location
+                orthophoto_path = work_dir / "orthophoto.tif"
+            if not orthophoto_path.exists():
+                orthophoto_path = None  # Will skip orthophoto overlay
+
+            # Generate flight visualizations
+            viz_paths, flight_stats = generate_flight_appendix(
+                work_dir=work_dir,
+                output_dir=self.images_dir,
+                reconstruction_path=reconstruction_path,
+                orthophoto_path=orthophoto_path,
+                project_name=self.config.area_name,
+            )
+
+            # Add flight path visualization
+            if "flight_path_static" in viz_paths:
+                with doc.create(pl.Figure(position="h!")) as fig:
+                    fig.add_image(
+                        str(viz_paths["flight_path_static"].relative_to(self.images_dir.parent)),
+                        width=NoEscape(r"0.75\textwidth")
+                    )
+                    fig.add_caption("Trajetória de Voo do Drone")
+
+            # Add flight statistics table
+            if flight_stats:
+                self._add_flight_stats_table(doc, flight_stats)
+
+            # Add combined dashboard
+            if "dashboard" in viz_paths:
+                with doc.create(pl.Figure(position="h!")) as fig:
+                    fig.add_image(
+                        str(viz_paths["dashboard"].relative_to(self.images_dir.parent)),
+                        width=NoEscape(r"0.95\textwidth")
+                    )
+                    fig.add_caption("Dashboard do Voo - Estatísticas e Perfis")
+
+        except FileNotFoundError as e:
+            logger.warning(f"reconstruction.json not found, skipping flight visualizations: {e}")
+            doc.append("Dados de voo não disponíveis para este projeto.")
+        except Exception as e:
+            logger.error(f"Failed to generate flight visualizations: {e}", exc_info=True)
+            doc.append("Erro ao gerar visualizações de voo.")
+
+        # Legacy ODM stats (if available)
+        if self.odm_stats and self.odm_stats_dir:
+            # Processing Statistics Table
+            if "processing_statistics" in self.odm_stats:
+                self._add_processing_stats_table(doc, self.odm_stats["processing_statistics"])
 
         # Appendix B: Orthophoto Data
         doc.append(NoEscape(r"\section{Dados da Ortofoto}"))
 
-        # Matchgraph
+        # Matchgraph - Feature correspondence graph
         self._add_odm_image(doc, "matchgraph.png", "Grafo de Correspondência de Características")
-
-        # GPS Errors Table
-        if "gps_errors" in self.odm_stats:
-            self._add_gps_errors_table(doc, self.odm_stats["gps_errors"])
 
         # Overlap diagram
         self._add_odm_image(doc, "overlap.png", "Diagrama de Sobreposição de Imagens")
 
         # Reconstruction Statistics Table
-        if "reconstruction_statistics" in self.odm_stats:
+        if self.odm_stats and "reconstruction_statistics" in self.odm_stats:
             self._add_reconstruction_stats_table(doc, self.odm_stats["reconstruction_statistics"])
 
         # Residual histogram
         self._add_odm_image(doc, "residual_histogram.png", "Histograma de Resíduos do Modelo")
 
         # Features Statistics Table
-        if "features_statistics" in self.odm_stats:
+        if self.odm_stats and "features_statistics" in self.odm_stats:
             self._add_features_stats_table(doc, self.odm_stats["features_statistics"])
 
     def _add_odm_image(self, doc: pl.Document, filename: str, caption: str) -> None:
@@ -918,39 +977,88 @@ RoyalBlue]
         doc.append(NoEscape(r"\end{table}"))
         doc.append(NoEscape(r"\end{center}"))
 
-    def _add_gps_errors_table(self, doc: pl.Document, gps_errors: dict) -> None:
-        """Add GPS errors table."""
+    def _add_flight_stats_table(self, doc: pl.Document, flight_stats: dict) -> None:
+        """Add flight statistics table."""
         doc.append(NoEscape(r"\begin{center}"))
         doc.append(NoEscape(r"\begin{table}[h!]"))
         doc.append(NoEscape(r"\centering"))
         doc.append(NoEscape(r"\begin{tabular}{lr}"))
         doc.append(NoEscape(r"\toprule"))
-        doc.append(NoEscape(r"Métrica de Erro GPS & Valor \\"))
+        doc.append(NoEscape(r"Métrica de Voo & Valor \\"))
         doc.append(NoEscape(r"\midrule"))
 
-        if "mean" in gps_errors:
-            for axis in ["x", "y", "z"]:
-                if axis in gps_errors["mean"]:
-                    val = gps_errors["mean"][axis]
-                    doc.append(NoEscape(f"Média {axis.upper()} & {val:.4f} \\\\"))
+        # Total images
+        if "total_images" in flight_stats:
+            doc.append(NoEscape(f"Total de Imagens & {flight_stats['total_images']} \\\\"))
 
-        if "std" in gps_errors:
-            for axis in ["x", "y", "z"]:
-                if axis in gps_errors["std"]:
-                    val = gps_errors["std"][axis]
-                    doc.append(NoEscape(f"Desvio Padrão {axis.upper()} & {val:.4f} \\\\"))
+        # Flight duration
+        if "flight_duration_min" in flight_stats and flight_stats["flight_duration_min"] != "N/A":
+            doc.append(NoEscape(f"Duração do Voo & {flight_stats['flight_duration_min']} min \\\\"))
 
-        if "error" in gps_errors:
-            for axis in ["x", "y", "z"]:
-                if axis in gps_errors["error"]:
-                    val = gps_errors["error"][axis]
-                    doc.append(NoEscape(f"Erro {axis.upper()} & {val:.4f} \\\\"))
+        # Total distance
+        if "total_distance_km" in flight_stats:
+            doc.append(NoEscape(f"Distância Total & {flight_stats['total_distance_km']} km \\\\"))
+
+        doc.append(NoEscape(r"\midrule"))
+
+        # Altitude stats
+        if "min_altitude_m" in flight_stats:
+            doc.append(NoEscape(f"Altitude Mínima & {flight_stats['min_altitude_m']} m \\\\"))
+        if "max_altitude_m" in flight_stats:
+            doc.append(NoEscape(f"Altitude Máxima & {flight_stats['max_altitude_m']} m \\\\"))
+        if "mean_altitude_m" in flight_stats:
+            doc.append(NoEscape(f"Altitude Média & {flight_stats['mean_altitude_m']} m \\\\"))
+
+        doc.append(NoEscape(r"\midrule"))
+
+        # Coverage area
+        if "coverage_area_ha" in flight_stats:
+            doc.append(NoEscape(f"Área de Cobertura & {flight_stats['coverage_area_ha']} ha \\\\"))
+
+        # Speed stats (optional)
+        if "mean_speed_kmh" in flight_stats:
+            doc.append(NoEscape(r"\midrule"))
+            doc.append(NoEscape(f"Velocidade Média & {flight_stats['mean_speed_kmh']} km/h \\\\"))
+
+        # GSD stats (optional)
+        if "mean_gsd_cm" in flight_stats:
+            doc.append(NoEscape(r"\midrule"))
+            doc.append(NoEscape(f"GSD Médio & {flight_stats['mean_gsd_cm']} cm/px \\\\"))
 
         doc.append(NoEscape(r"\bottomrule"))
         doc.append(NoEscape(r"\end{tabular}"))
-        doc.append(NoEscape(r"\caption{Erros de GPS}"))
+        doc.append(NoEscape(r"\caption{Estatísticas do Voo}"))
         doc.append(NoEscape(r"\end{table}"))
         doc.append(NoEscape(r"\end{center}"))
+
+        # GPS error table (componentwise - ODM format)
+        if "mean_gps_error_x_m" in flight_stats:
+            doc.append(NoEscape(r"\vspace{1em}"))
+            doc.append(NoEscape(r"\begin{center}"))
+            doc.append(NoEscape(r"\begin{table}[H]"))
+            doc.append(NoEscape(r"\centering"))
+            doc.append(NoEscape(r"\begin{tabular}{ll}"))
+            doc.append(NoEscape(r"\toprule"))
+            doc.append(NoEscape(r"Métrica de Erro GPS & Valor \\"))
+            doc.append(NoEscape(r"\midrule"))
+            doc.append(NoEscape(f"Média X & {flight_stats['mean_gps_error_x_m']} m \\\\"))
+            doc.append(NoEscape(f"Média Y & {flight_stats['mean_gps_error_y_m']} m \\\\"))
+            doc.append(NoEscape(f"Média Z & {flight_stats['mean_gps_error_z_m']} m \\\\"))
+            doc.append(NoEscape(r"\midrule"))
+            doc.append(NoEscape(f"Desvio Padrão X & {flight_stats['std_gps_error_x_m']} m \\\\"))
+            doc.append(NoEscape(f"Desvio Padrão Y & {flight_stats['std_gps_error_y_m']} m \\\\"))
+            doc.append(NoEscape(f"Desvio Padrão Z & {flight_stats['std_gps_error_z_m']} m \\\\"))
+            doc.append(NoEscape(r"\midrule"))
+            # Also show 3D errors for reference
+            if "mean_gps_error_m" in flight_stats:
+                doc.append(NoEscape(f"Erro 3D Médio & {flight_stats['mean_gps_error_m']} m \\\\"))
+                if "max_gps_error_m" in flight_stats:
+                    doc.append(NoEscape(f"Erro 3D Máximo & {flight_stats['max_gps_error_m']} m \\\\"))
+            doc.append(NoEscape(r"\bottomrule"))
+            doc.append(NoEscape(r"\end{tabular}"))
+            doc.append(NoEscape(r"\caption{Erros de Predição GPS (Precisão da Reconstrução)}"))
+            doc.append(NoEscape(r"\end{table}"))
+            doc.append(NoEscape(r"\end{center}"))
 
     def _add_reconstruction_stats_table(self, doc: pl.Document, stats: dict) -> None:
         """Add reconstruction statistics table."""
