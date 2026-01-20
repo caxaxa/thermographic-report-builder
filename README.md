@@ -243,7 +243,7 @@ const reportBuilderJob = new batch.JobDefinition(this, 'ReportBuilderJob', {
 7. **Match Raw Thermal Images** - Use source-map backtracking to find exact pixel coordinates in raw thermal images
 8. **Annotate Thermal Images** - Draw hot/cold markers on raw thermal images with temperature readings
 9. **Generate Flight Appendix** - Calculate flight metrics and create visualizations (if reconstruction.json available)
-10. **Generate PDF** - Create LaTeX document and compile to PDF
+10. **Generate PDF** - Create LaTeX document and compile to PDF (with intelligent figure sizing)
 11. **Export Metrics** - Calculate statistics and export to JSON/CSV
 12. **Upload Results** - Push all artifacts to S3
 
@@ -283,6 +283,13 @@ The report builder uses a sophisticated **source-map backtracking** system to lo
 If source-map backtracking fails, the system falls back to:
 1. **Reconstruction.json camera reprojection** - Uses OpenSfM camera poses
 2. **GPS proximity matching** - Finds closest image by GPS distance
+
+### Sparse Source-Map Support
+
+The source-map backtracker supports **stride > 1** sparse source-maps for large projects:
+- Reads `SOURCE_MAP_STRIDE` metadata from the GeoTIFF
+- Automatically scales orthophoto coordinates by stride before lookup
+- Uses search radius fallback for pixels that fall between grid points
 
 See `docs/THERMAL_BACKTRACKING_ARCHITECTURE.md` for complete technical details.
 
@@ -364,9 +371,12 @@ This ordering applies to both the summary table and the detailed sections.
 | Blue cross (cold point) missing | Cold point coordinates invalid or off-image | Check logs for cold point calculation errors |
 | Source-map backtracking fails | Source-map not generated or corrupted | Re-run ODM processing with patched image to regenerate `odm_orthophoto_sources.tif` |
 | Defect coordinates outside panel bbox | Coordinate transform chain mismatch | Enable DEBUG logging to trace coordinate transformations |
+| Figures overflow page boundaries | Very tall orthophoto (aspect ratio > 1.5) | Fixed in Jan 2026 - figures now use `keepaspectratio` with height constraints |
 | "Erro ao gerar visualizações de voo" in report | reconstruction.json missing or malformed | Verify ODM job completed successfully and uploaded reconstruction.json to S3; see [Flight Appendix Troubleshooting](docs/FLIGHT_APPENDIX.md#troubleshooting) |
 | NaN values in flight statistics | Coordinate conversion issue (ENU vs WGS84) | Check that latitude values are -90 to +90 (not -94 to +95); ensure ENU to WGS84 conversion is applied |
 | GPS error metric missing | GPS error calculation not implemented | Verify FlightMetrics includes mean_gps_error and max_gps_error fields |
+| Override markers appear in wrong position | Flight direction rotation mismatch | Ensure override tool version includes flight direction rotation; recapture overrides with updated tool |
+| South-facing panel overrides all fail | Old override tool (pre-2025-01) didn't rotate south-facing images | Update `annotation_override_tool.py` to latest version; recapture all south-facing overrides |
 
 ## Hot Point Detection Algorithm
 
@@ -399,6 +409,114 @@ The thermal annotator identifies the hottest and coldest points within each pane
 ### Flight Direction Handling
 
 For south-facing flights, both the thermal array and visual image are rotated 180° to maintain consistent coordinate systems. This is critical for accurate hot/cold point detection.
+
+## PDF Figure Sizing
+
+The report builder uses **intelligent figure sizing** to ensure overview images (Figures 1 and 2) fit within page boundaries regardless of orthophoto dimensions.
+
+### How It Works
+
+For the orthophoto overview and layer map figures, the LaTeX `\includegraphics` command uses both width AND height constraints:
+
+```latex
+\includegraphics[width=0.85\textwidth,height=0.55\textheight,keepaspectratio]{image.png}
+```
+
+- **Width constraint**: 85% of text width (leaves margin for page borders)
+- **Height constraint**: 55% of text height (leaves room for caption, header, footer)
+- **`keepaspectratio`**: Maintains original aspect ratio within these bounds
+
+### Why This Matters
+
+Orthophotos can have extreme aspect ratios (e.g., 3488×5997 pixels = 1.72 height/width ratio). Without height constraints, tall images would overflow the page, pushing content into the footer or off the page entirely.
+
+### Implementation
+
+**File**: `src/thermographic_report_builder/report/builder.py` - `_add_area_overview()` method
+
+The figure is added using raw LaTeX rather than pylatex's `add_image()` to enable the dual constraints:
+
+```python
+fig.append(NoEscape(
+    r"\centering\includegraphics[width=0.85\textwidth,height=0.55\textheight,keepaspectratio]{"
+    + image_path + r"}"
+))
+```
+
+## Annotation Override Tool
+
+The `annotation_override_tool.py` allows manual correction of misaligned thermal annotations. When automatic hot/cold point detection places markers incorrectly (e.g., on vegetation instead of the panel), this tool lets you manually re-mark the correct positions.
+
+### Usage
+
+```bash
+# List all defects in the project
+python3 annotation_override_tool.py list
+
+# Override a specific defect
+python3 annotation_override_tool.py 'hotspots_(2-15)_defeito1'
+
+# Show current overrides
+python3 annotation_override_tool.py show
+
+# Upload overrides to S3
+python3 annotation_override_tool.py upload
+```
+
+### How It Works
+
+1. Downloads the annotation manifest from S3
+2. Downloads the raw thermal image for the selected defect
+3. Displays the image with current hot/cold markers
+4. Click to set new positions:
+   - **Left click** = Set HOT point (red marker)
+   - **Right click** = Set COLD point (blue marker)
+5. Press **'s'** to save, **'r'** to reset, **'q'** to quit
+6. Saves overrides to `/tmp/annotation_overrides.json`
+7. Use `upload` command to push to S3
+
+### Flight Direction Rotation
+
+**Critical**: The override tool automatically rotates images 180° for south-facing flights to match the coordinate system used in the report.
+
+Without this rotation:
+- User would see the unrotated image
+- Click coordinates would be in unrotated space
+- Report rendering uses rotated coordinates
+- Result: markers appear in wrong position
+
+The tool reads `flight_direction` from the annotation manifest and applies the same rotation used during automatic annotation, ensuring coordinates match between the tool and the report.
+
+### Override Storage
+
+Overrides are stored in S3 at:
+```
+s3://solar-reports-{env}/{user}/projects/{project}/annotation_overrides.json
+```
+
+Format:
+```json
+{
+  "project_id": "01KD1776A2SCQ3WZ39GZWD5XER",
+  "user_id": "f15b8580-0071-7077-f7a2-1d569b70c376",
+  "created_at": "2025-01-19T04:00:00.000Z",
+  "overrides": [
+    {
+      "defect_id": "hotspots_(2-15)_defeito1",
+      "hot_point": {"x": 320, "y": 256},
+      "cold_point": {"x": 400, "y": 300}
+    }
+  ]
+}
+```
+
+### Re-rendering with Overrides
+
+After uploading overrides, regenerate the report. The report builder will:
+1. Load `annotation_overrides.json` from S3
+2. For each override, re-render the thermal image with new hot/cold points
+3. Apply flight direction rotation when rendering (same as automatic annotation)
+4. Replace the original annotated image with the corrected version
 
 ## Monitoring
 

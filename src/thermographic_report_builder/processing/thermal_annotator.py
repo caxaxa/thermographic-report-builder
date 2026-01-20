@@ -846,6 +846,7 @@ class ThermalAnnotator:
         defect_index: int = 1,
         zoom_size: int = 200,
         output_size: Tuple[int, int] = (600, 500),
+        flight_direction: Optional[str] = None,
     ) -> Optional[AnnotatedThermalImage]:
         """
         Create annotated thermal image using manually specified hot/cold points.
@@ -855,12 +856,13 @@ class ThermalAnnotator:
 
         Args:
             raw_image_path: Path to the raw thermal image (DJI R-JPEG)
-            hot_point: Hot point coordinates in THERMAL space (640x512)
-            cold_point: Cold point coordinates in THERMAL space (640x512)
+            hot_point: Hot point coordinates in THERMAL space (640x512), in ROTATED space
+            cold_point: Cold point coordinates in THERMAL space (640x512), in ROTATED space
             panel_id: Panel identifier (e.g., "A-01")
             defect_index: Defect index (1-based)
             zoom_size: Size of zoom window around defect (pixels)
             output_size: Final output image size (width, height)
+            flight_direction: 'south' if drone was flying south (requires 180° rotation)
 
         Returns:
             AnnotatedThermalImage or None if creation fails
@@ -879,6 +881,12 @@ class ThermalAnnotator:
                 logger.warning(f"Could not get temperature array for {raw_image_path}")
                 return None
 
+            # Rotate thermal array 180° for south-facing flights
+            # Override coordinates are in ROTATED space, so we need to rotate the raw data to match
+            if flight_direction == "south":
+                temp_array = np.rot90(temp_array, 2)  # 180° rotation
+                logger.debug("Rotated thermal array 180° for south-facing flight (override)")
+
             # Get temperatures using 5x5 area around the clicked point
             # Hot point: take maximum temperature in 5x5 area
             # Cold point: take minimum temperature in 5x5 area
@@ -890,6 +898,12 @@ class ThermalAnnotator:
             if img is None:
                 logger.warning(f"Could not load image: {raw_image_path}")
                 return None
+
+            # Rotate visual image 180° for south-facing flights
+            if flight_direction == "south":
+                img = cv2.rotate(img, cv2.ROTATE_180)
+                logger.debug("Rotated visual image 180° for south-facing flight (override)")
+
             img_h, img_w = img.shape[:2]
 
             from ..utils.thermal_alignment import clamp_thermal_coords, thermal_to_visual, ImageFormat

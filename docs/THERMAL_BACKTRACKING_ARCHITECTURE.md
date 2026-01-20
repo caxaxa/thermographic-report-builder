@@ -1824,5 +1824,48 @@ We set out to achieve 100% deterministic inverse mapping and discovered somethin
 ---
 
 *Document created: January 16, 2026*
-*Last updated: January 16, 2026*
+*Last updated: January 20, 2026*
 *Author: Development team with contributions from user technical review*
+
+---
+
+## Appendix: January 2026 Deployment Verification
+
+### Source-Map Stride Support in Report Builder
+
+**Date**: January 20, 2026
+
+The report builder's stride support was verified working in production:
+
+**Evidence from CloudWatch Logs** (job `cb7514ff-8aeb-4688-b330-113d500632b2`):
+```
+Loaded source-map: 872x1500, stride=4, valid pixels: 824745
+Source-map match: ortho=(289,3513) -> DJI_20241129082857_0231_T.JPG (371.6, 337.4)
+```
+
+**Key observations**:
+1. Stride metadata (`stride=4`) is correctly read from the GeoTIFF
+2. Orthophoto coordinates are properly divided by stride before lookup
+3. All 17 defects in the test project matched via source-map backtracking
+4. No reprojection fallbacks were needed
+
+**Implementation verification**:
+- **File**: `source_map_backtracker.py` line ~73
+- **Reads**: `self.stride = int(src.tags().get('SOURCE_MAP_STRIDE', '1'))`
+- **Scales**: `scaled_x = ortho_x / self.stride` before array lookup
+
+### Figure Sizing Fix
+
+**Date**: January 20, 2026
+
+Fixed an issue where Figures 1 and 2 (orthophoto overview and layer map) would overflow page boundaries for tall orthophotos.
+
+**Problem**: Orthophoto dimensions 3488×5997 (aspect ratio 1.72) caused images to extend past the page footer.
+
+**Solution**: Changed from fixed width to dual width+height constraints with `keepaspectratio`:
+
+```latex
+\includegraphics[width=0.85\textwidth,height=0.55\textheight,keepaspectratio]{image.png}
+```
+
+**File**: `report/builder.py` - `_add_area_overview()` method

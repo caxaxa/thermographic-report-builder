@@ -420,15 +420,25 @@ RoyalBlue]
             doc.append(NoEscape(r"\FloatBarrier"))
 
             # Orthophoto overview (use relative path)
+            # Use both width and height constraints with keepaspectratio to prevent overflow
+            # Available text height after header/footer is approximately 0.65\textheight
             ortho_path = "report_images/ortho.png"
             with doc.create(pl.Figure(position="h!")) as fig:
-                fig.add_image(ortho_path, width=NoEscape(r"0.75\textwidth"))
+                # Constrain to 0.85 textwidth and 0.55 textheight, keeping aspect ratio
+                fig.append(NoEscape(
+                    r"\centering\includegraphics[width=0.85\textwidth,height=0.55\textheight,keepaspectratio]{"
+                    + ortho_path + r"}"
+                ))
                 fig.add_caption("Ortofoto da área inspecionada")
 
             # Layer map (use relative path)
             layer_path = "report_images/layer_img.pdf"
             with doc.create(pl.Figure(position="h!")) as fig:
-                fig.add_image(layer_path, width=NoEscape(r"0.75\textwidth"))
+                # Same constraints for layer map
+                fig.append(NoEscape(
+                    r"\centering\includegraphics[width=0.85\textwidth,height=0.55\textheight,keepaspectratio]{"
+                    + layer_path + r"}"
+                ))
                 fig.add_caption("Mapa de rastreadores e defeitos detectados")
 
     def _add_defect_summary_table(self, doc: pl.Document) -> None:

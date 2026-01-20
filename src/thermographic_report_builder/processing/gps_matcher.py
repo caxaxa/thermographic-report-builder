@@ -1623,12 +1623,16 @@ class GPSMatcher:
                 continue
 
             try:
+                # Get flight direction for this image to apply correct rotation
+                flight_dir = self.orientation_map.get(entry.raw_image_name)
+
                 annotated = self.thermal_annotator.create_annotated_image_with_points(
                     raw_image_path=raw_image_path,
                     hot_point=hot_point,
                     cold_point=cold_point,
                     panel_id=entry.panel_id,
                     defect_index=entry.defect_index,
+                    flight_direction=flight_dir,
                 )
 
                 if annotated:
