@@ -42,6 +42,9 @@ class SourceMapBacktracker:
 
     Invalid pixels have NaN values.
     Legacy uint16 source-maps (view_id = 65535 for invalid) are also supported.
+
+    Sparse source-maps (stride > 1) are supported via the SOURCE_MAP_STRIDE metadata.
+    The geotransform is used to convert orthophoto pixel coordinates to source-map coordinates.
     """
 
     INVALID_VIEW_ID = 65535  # For backward compatibility with uint16 source-maps
@@ -64,6 +67,7 @@ class SourceMapBacktracker:
         self.raw_y: Optional[np.ndarray] = None
         self.width = 0
         self.height = 0
+        self.stride = 1  # Default stride (full resolution)
         self.view_id_to_name: Dict[int, str] = {}
 
         if not source_map_path.exists():
@@ -81,11 +85,15 @@ class SourceMapBacktracker:
                 # Store transform for coordinate conversion
                 self.transform = src.transform
 
+                # Read stride from metadata (default 1 for backwards compatibility)
+                tags = src.tags()
+                self.stride = int(tags.get('SOURCE_MAP_STRIDE', '1'))
+
             valid_pixels = int(
                 np.sum(~np.isnan(self.view_ids) & (self.view_ids != self.INVALID_VIEW_ID))
             )
             logger.info(
-                f"Loaded source-map: {self.width}x{self.height}, "
+                f"Loaded source-map: {self.width}x{self.height}, stride={self.stride}, "
                 f"valid pixels: {valid_pixels}"
             )
         except Exception as e:
@@ -153,8 +161,8 @@ class SourceMapBacktracker:
         Look up raw image pixel for an orthophoto pixel.
 
         Args:
-            ortho_x: X coordinate in orthophoto (pixels, in source-map resolution)
-            ortho_y: Y coordinate in orthophoto (pixels, in source-map resolution)
+            ortho_x: X coordinate in orthophoto (pixels, in ORTHOPHOTO resolution)
+            ortho_y: Y coordinate in orthophoto (pixels, in ORTHOPHOTO resolution)
 
         Returns:
             SourceMapResult with view_id, raw_x, raw_y, and image_name, or None if invalid
@@ -162,9 +170,14 @@ class SourceMapBacktracker:
         if not self.available:
             return None
 
-        # Round to nearest pixel
-        col = int(round(ortho_x))
-        row = int(round(ortho_y))
+        # Convert orthophoto pixel coordinates to source-map pixel coordinates
+        # For sparse source-maps (stride > 1), the source-map has larger pixels
+        scaled_x = ortho_x / self.stride
+        scaled_y = ortho_y / self.stride
+
+        # Round to nearest pixel in source-map space
+        col = int(round(scaled_x))
+        row = int(round(scaled_y))
 
         # Check bounds
         if col < 0 or col >= self.width or row < 0 or row >= self.height:
@@ -215,9 +228,9 @@ class SourceMapBacktracker:
         and returns the most common valid result.
 
         Args:
-            ortho_x: X coordinate in orthophoto (pixels)
-            ortho_y: Y coordinate in orthophoto (pixels)
-            search_radius: Radius to search if exact pixel is invalid
+            ortho_x: X coordinate in orthophoto (pixels, in ORTHOPHOTO resolution)
+            ortho_y: Y coordinate in orthophoto (pixels, in ORTHOPHOTO resolution)
+            search_radius: Radius to search in SOURCE-MAP pixels if exact pixel is invalid
 
         Returns:
             SourceMapResult or None if no valid pixels found
@@ -230,16 +243,23 @@ class SourceMapBacktracker:
         if not self.available:
             return None
 
-        # Search nearby pixels
-        col = int(round(ortho_x))
-        row = int(round(ortho_y))
+        # Convert orthophoto coordinates to source-map coordinates
+        scaled_x = ortho_x / self.stride
+        scaled_y = ortho_y / self.stride
+
+        # Search nearby pixels in source-map space
+        col = int(round(scaled_x))
+        row = int(round(scaled_y))
+
+        # Ensure minimum search radius covers at least one stride worth of pixels
+        effective_radius = max(search_radius, 2)
 
         # Collect all valid results in search area
         from collections import Counter
         results: Counter = Counter()
 
-        for dy in range(-search_radius, search_radius + 1):
-            for dx in range(-search_radius, search_radius + 1):
+        for dy in range(-effective_radius, effective_radius + 1):
+            for dx in range(-effective_radius, effective_radius + 1):
                 c = col + dx
                 r = row + dy
 
@@ -263,7 +283,7 @@ class SourceMapBacktracker:
 
         if not results:
             logger.debug(
-                f"No valid source-map pixels in {search_radius}px radius around ({col}, {row})"
+                f"No valid source-map pixels in {effective_radius}px radius around ({col}, {row})"
             )
             return None
 
@@ -273,8 +293,8 @@ class SourceMapBacktracker:
         # Find the closest pixel with this view_id to get raw coordinates
         best_dist = None
         best_coords = None
-        for dy in range(-search_radius, search_radius + 1):
-            for dx in range(-search_radius, search_radius + 1):
+        for dy in range(-effective_radius, effective_radius + 1):
+            for dx in range(-effective_radius, effective_radius + 1):
                 c = col + dx
                 r = row + dy
 
@@ -299,7 +319,8 @@ class SourceMapBacktracker:
         image_name = self.view_id_to_name.get(best_view_id)
 
         logger.debug(
-            f"Source-map search hit: ortho=({col}, {row}) radius={search_radius} -> "
+            f"Source-map search hit: ortho=({ortho_x}, {ortho_y}) scaled=({col}, {row}) "
+            f"radius={effective_radius} stride={self.stride} -> "
             f"view_id={best_view_id}, raw=({raw_x}, {raw_y}), image={image_name}"
         )
 
@@ -323,6 +344,7 @@ class SourceMapBacktracker:
             "available": True,
             "width": self.width,
             "height": self.height,
+            "stride": self.stride,
             "total_pixels": total,
             "valid_pixels": valid,
             "coverage_percent": round(100 * valid / total, 2) if total > 0 else 0,
