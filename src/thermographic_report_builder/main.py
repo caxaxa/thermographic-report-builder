@@ -101,35 +101,14 @@ def _compile_only_mode(work_dir: Path, images_dir: Path, start_time: float) -> i
         logger.error(f"PDF compilation failed: {e}")
         return 1
 
-    # Generate low-res PDF using Ghostscript
-    pdf_lowres_path = work_dir / "report-lowres.pdf"
-    try:
-        result = subprocess.run([
-            "gs", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.4",
-            "-dPDFSETTINGS=/ebook", "-dNOPAUSE", "-dQUIET", "-dBATCH",
-            f"-sOutputFile={pdf_lowres_path}", str(pdf_full_path)
-        ], capture_output=True, text=True, timeout=120)
-
-        if pdf_lowres_path.exists():
-            lowres_size_mb = pdf_lowres_path.stat().st_size / 1024 / 1024
-            logger.info(f"Generated low-res PDF: {lowres_size_mb:.1f} MB")
-        else:
-            logger.warning("Low-res PDF generation failed, will upload full PDF only")
-            pdf_lowres_path = None
-    except Exception as e:
-        logger.warning(f"Low-res PDF generation failed: {e}")
-        pdf_lowres_path = None
-
     # Upload PDFs to S3
     logger.info("=" * 80)
     logger.info("Uploading recompiled PDFs to S3")
     logger.info("=" * 80)
 
     pdf_full_s3 = s3_client.upload_report(pdf_full_path, "report-full.pdf")
-    if pdf_lowres_path and pdf_lowres_path.exists():
-        pdf_lowres_s3 = s3_client.upload_report(pdf_lowres_path, "report-lowres.pdf")
-    else:
-        pdf_lowres_s3 = pdf_full_s3
+    # Preview PDF not available in compile-only mode (no data context), use full PDF as fallback
+    pdf_preview_s3 = s3_client.upload_report(pdf_full_path, "report-preview.pdf")
 
     # Delete the .edited marker since we've successfully recompiled
     s3_client.delete_tex_edited_marker()
@@ -139,7 +118,7 @@ def _compile_only_mode(work_dir: Path, images_dir: Path, start_time: float) -> i
     logger.info("=" * 80)
     logger.info(f"TeX recompilation completed successfully in {duration:.1f}s")
     logger.info(f"Full PDF: {pdf_full_s3}")
-    logger.info(f"Low-res PDF: {pdf_lowres_s3}")
+    logger.info(f"Preview PDF: {pdf_preview_s3}")
     logger.info("=" * 80)
 
     return 0
@@ -557,6 +536,7 @@ def main() -> int:
         report_config = ReportConfig(
             area_name=settings.area_name,
             client_name=settings.client_name,
+            language=settings.report_language,
             engineer_name=settings.engineer_name,
             crea_number=settings.crea_number,
             location=report_location,
@@ -575,6 +555,23 @@ def main() -> int:
 
         tex_path = work_dir / "report.tex"
         builder.generate_tex(tex_path)
+
+        # Generate preview .tex file
+        preview_tex_path = None
+        if settings.generate_preview_pdf:
+            logger.info("Generating preview LaTeX file...")
+            preview_builder = ReportBuilder(
+                panel_grid=panel_grid,
+                images_dir=images_dir,
+                config=report_config,
+                odm_stats=odm_stats,
+                odm_stats_dir=odm_stats_dir,
+                defect_matches=defect_matches,
+                annotation_manifest=manifest,
+                preview=True,
+            )
+            preview_tex_path = work_dir / "report-preview.tex"
+            preview_builder.generate_tex(preview_tex_path)
 
         # ===== STEP 9: Export metrics =====
         logger.info("=" * 80)
@@ -660,24 +657,49 @@ def main() -> int:
         except Exception as e:
             raise ProcessingError(f"PDF compilation failed: {e}")
 
-        # Generate low-res PDF using Ghostscript
-        pdf_lowres_path = work_dir / "report-lowres.pdf"
-        try:
-            result = subprocess.run([
-                "gs", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.4",
-                "-dPDFSETTINGS=/ebook", "-dNOPAUSE", "-dQUIET", "-dBATCH",
-                f"-sOutputFile={pdf_lowres_path}", str(pdf_full_path)
-            ], capture_output=True, text=True, timeout=120)
+        # Compile preview PDF (if preview .tex was generated)
+        pdf_preview_path = None
+        if preview_tex_path and preview_tex_path.exists():
+            pdf_preview_path = work_dir / "report-preview.pdf"
+            try:
+                # First pass
+                result = subprocess.run(
+                    ["pdflatex", "-interaction=nonstopmode", "-output-directory", str(work_dir), str(preview_tex_path)],
+                    cwd=work_dir,
+                    capture_output=True,
+                    text=True,
+                    encoding='latin-1',
+                    errors='replace',
+                    timeout=300
+                )
+                if result.returncode != 0:
+                    logger.warning(f"Preview pdflatex first pass had warnings (exit code {result.returncode})")
+                    if result.stdout:
+                        logger.error(f"Preview pdflatex stdout (last 30 lines): {chr(10).join(result.stdout.splitlines()[-30:])}")
 
-            if pdf_lowres_path.exists():
-                lowres_size_mb = pdf_lowres_path.stat().st_size / 1024 / 1024
-                logger.info(f"✓ Generated low-res PDF: {lowres_size_mb:.1f} MB")
-            else:
-                logger.warning("Low-res PDF generation failed, will upload full PDF only")
-                pdf_lowres_path = None
-        except Exception as e:
-            logger.warning(f"Low-res PDF generation failed: {e}")
-            pdf_lowres_path = None
+                # Second pass (for cross-references)
+                result = subprocess.run(
+                    ["pdflatex", "-interaction=nonstopmode", "-output-directory", str(work_dir), str(preview_tex_path)],
+                    cwd=work_dir,
+                    capture_output=True,
+                    text=True,
+                    encoding='latin-1',
+                    errors='replace',
+                    timeout=300
+                )
+
+                if pdf_preview_path.exists():
+                    preview_size_mb = pdf_preview_path.stat().st_size / 1024 / 1024
+                    logger.info(f"✓ Generated preview PDF: {preview_size_mb:.1f} MB")
+                else:
+                    logger.warning("Preview PDF generation failed, will upload full PDF as fallback")
+                    pdf_preview_path = None
+            except subprocess.TimeoutExpired:
+                logger.warning("Preview PDF compilation timed out")
+                pdf_preview_path = None
+            except Exception as e:
+                logger.warning(f"Preview PDF generation failed: {e}")
+                pdf_preview_path = None
 
         # ===== STEP 11: Upload LaTeX bundle, PDFs, and metrics to S3 =====
         logger.info("=" * 80)
@@ -689,10 +711,10 @@ def main() -> int:
 
         # Upload PDFs
         pdf_full_s3 = s3_client.upload_report(pdf_full_path, "report-full.pdf")
-        if pdf_lowres_path and pdf_lowres_path.exists():
-            pdf_lowres_s3 = s3_client.upload_report(pdf_lowres_path, "report-lowres.pdf")
+        if pdf_preview_path and pdf_preview_path.exists():
+            pdf_preview_s3 = s3_client.upload_report(pdf_preview_path, "report-preview.pdf")
         else:
-            pdf_lowres_s3 = pdf_full_s3  # Fallback to full PDF
+            pdf_preview_s3 = pdf_full_s3  # Fallback to full PDF
 
         # Upload metrics
         metrics_json_s3 = s3_client.upload_report(metrics_json_path, "metrics.json")
@@ -724,13 +746,13 @@ def main() -> int:
         logger.info("=" * 80)
         logger.info(f"✅ Thermographic report generated successfully in {duration:.1f}s")
         logger.info(f"Full PDF: {pdf_full_s3}")
-        logger.info(f"Low-res PDF: {pdf_lowres_s3}")
+        logger.info(f"Preview PDF: {pdf_preview_s3}")
         logger.info("=" * 80)
 
         # Create job output summary
         job_output = JobOutput(
             report_full_pdf_s3=pdf_full_s3,
-            report_lowres_pdf_s3=pdf_lowres_s3,
+            report_preview_pdf_s3=pdf_preview_s3,
             metrics_json_s3=metrics_json_s3,
             metrics_csv_s3=metrics_csv_s3,
             layers_dxf_s3=dxf_s3,

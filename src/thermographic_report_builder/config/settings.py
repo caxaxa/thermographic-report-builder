@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     # ===== PDF Generation =====
     pdf_quality: int = 90
     jpeg_quality: int = 70
-    generate_lowres_pdf: bool = True
+    generate_preview_pdf: bool = True
 
     # ===== Thermal Calibration Parameters =====
     # These parameters affect temperature accuracy in thermal analysis

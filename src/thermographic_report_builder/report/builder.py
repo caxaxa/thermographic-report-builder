@@ -12,7 +12,20 @@ from pylatex.utils import NoEscape, bold, escape_latex
 from ..models.defect import Panel
 from ..models.report import ReportConfig
 from ..models.annotation_manifest import AnnotationManifest
-from ..config import constants
+from ..config.constants import (
+    DEFECT_COLORS,
+    get_defect_labels,
+    get_report_abstract,
+    get_report_intro,
+    get_area_overview_text,
+    get_report_text,
+    get_title_page_text,
+    get_defect_details_text,
+    get_summary_table_text,
+    get_thermal_legend_text,
+    get_appendix_text,
+    get_preview_text,
+)
 from ..utils.logger import get_logger
 from ..utils.exceptions import ReportGenerationError
 from ..processing.gps_matcher import DefectMatch
@@ -32,6 +45,7 @@ class ReportBuilder:
         odm_stats_dir: Path = None,
         defect_matches: Optional[Dict[str, DefectMatch]] = None,
         annotation_manifest: Optional[AnnotationManifest] = None,
+        preview: bool = False,
     ):
         """
         Initialize report builder.
@@ -44,7 +58,9 @@ class ReportBuilder:
             odm_stats_dir: Directory containing ODM stats images (optional)
             defect_matches: Dictionary of defect matches with temperature data (optional)
             annotation_manifest: Annotation manifest with temperature data for thermal images
+            preview: If True, generate a preview PDF with watermark and suppressed content
         """
+        self.preview = preview
         self.panel_grid = panel_grid
         self.images_dir = images_dir
         self.config = config
@@ -197,7 +213,9 @@ class ReportBuilder:
     def _add_preamble(self, doc: pl.Document) -> None:
         """Add LaTeX preamble with packages and configuration."""
         doc.preamble.append(pl.Command("usepackage", options="utf8", arguments="inputenc"))
-        doc.preamble.append(pl.Command("usepackage", options="brazil", arguments="babel"))
+        # Set babel language based on config
+        babel_lang = "english" if self.config.language in ("en-US", "en") else "brazil"
+        doc.preamble.append(pl.Command("usepackage", options=babel_lang, arguments="babel"))
         doc.packages.append(pl.Package("graphicx"))
         doc.packages.append(pl.Package("placeins"))
         doc.packages.append(pl.Package("subfig"))
@@ -218,6 +236,20 @@ class ReportBuilder:
         doc.preamble.append(NoEscape(r"\setlength{\footskip}{1cm}"))
         doc.preamble.append(NoEscape(r"\geometry{top=4cm}"))
 
+        # Watermark for preview mode
+        if self.preview:
+            doc.packages.append(pl.Package("background"))
+            doc.preamble.append(NoEscape(
+                r"\backgroundsetup{"
+                r"scale=1,"
+                r"color=black,"
+                r"opacity=0.08,"
+                r"angle=0,"
+                r"position=current page.center,"
+                r"contents={\includegraphics[width=0.5\paperwidth]{report_images/aisol_logo.png}}"
+                r"}"
+            ))
+
         # Header and footer
         # Use relative path for LaTeX compilation in different container
         logo_path = "report_images/aisol_logo.png"
@@ -226,14 +258,22 @@ class ReportBuilder:
                 r"\fancyhead[L]{{\includegraphics[width=0.1\paperwidth]{" + logo_path + r"}}}"
             )
         )
-        doc.preamble.append(NoEscape(r"\fancyhead[R]{Relatório Termográfico}"))
+        report_title = get_report_text("report_title", self.config.language)
+        footer_text = get_report_text("footer_text", self.config.language)
+        doc.preamble.append(NoEscape(r"\fancyhead[R]{" + report_title + r"}"))
         doc.preamble.append(
-            NoEscape(r"\fancyfoot[C]{GreTA®, Versão Beta - 2026 \quad Desenvolvido por Aisol}")
+            NoEscape(r"\fancyfoot[C]{" + footer_text + r"}")
         )
 
     def _add_title_page(self, doc: pl.Document) -> None:
         """Add fancy TikZ cover page."""
         doc.append(NoEscape(r"\thispagestyle{empty}"))
+
+        # Get localized texts
+        report_title = get_report_text("report_title", self.config.language)
+        subtitle_key = "report_subtitle_preview" if self.preview else "report_subtitle"
+        report_subtitle = get_title_page_text(subtitle_key, self.config.language)
+        developed_by = get_title_page_text("developed_by", self.config.language)
 
         # Fancy TikZ cover with geometric shapes
         doc.append(NoEscape(r"""
@@ -330,10 +370,10 @@ RoyalBlue]
 % Title
 \node[align=center] at ($(current page.center)+(0,-5)$)
 {
-{\fontsize{60}{72} \selectfont {{Relatório Termográfico}}} \\[1cm]
-{\fontsize{16}{19.2} \selectfont \textcolor{RoyalBlue}{ \bf Relatório Físico}}\\[3pt]};
+{\fontsize{60}{72} \selectfont {{""" + report_title + r"""}}} \\[1cm]
+{\fontsize{16}{19.2} \selectfont \textcolor{RoyalBlue}{ \bf """ + report_subtitle + r"""}}\\[3pt]};
 \node[align=center] at ($(current page.center)+(0,-9.5)$)
-{ Desenvolvido por:};
+{ """ + developed_by + r"""};
 \node[align=center] at ($(current page.center)+(0,-11)$)
 {\includegraphics[width=0.2\paperwidth]{report_images/aisol_logo.png}};
 
@@ -341,77 +381,109 @@ RoyalBlue]
 """))
         doc.append(NoEscape(r"\newpage"))
 
-        # Second title page with details
+        # Second title page with details - get localized texts
+        thermal_report = get_title_page_text("thermal_inspection_report", self.config.language)
+        tech_responsible = get_title_page_text("technical_responsible", self.config.language)
+        date_label = get_title_page_text("date", self.config.language)
+        location_label = get_title_page_text("location", self.config.language)
+        address_label = get_title_page_text("address", self.config.language)
+        software_label = get_title_page_text("software", self.config.language)
+        software_desc = get_title_page_text("software_desc", self.config.language)
+        copyright_text = get_title_page_text("copyright", self.config.language)
+        rights_text = get_title_page_text("rights_reserved", self.config.language)
+        isbn_label = get_title_page_text("isbn", self.config.language)
+        isbn_value = get_title_page_text("isbn_value", self.config.language)
+
         doc.append(NoEscape(r"\thispagestyle{empty}"))
         doc.append(NoEscape(r"\vspace*{0.4cm}"))
         doc.append(NoEscape(r"\rule{\linewidth}{0.5pt}"))
         doc.append(NoEscape(r"\begin{center}"))
-        doc.append(NoEscape(r"{\large\bfseries Relatório de Inspeção por Imagem Térmica}\\"))
+        doc.append(NoEscape(r"{\large\bfseries " + thermal_report + r"}\\"))
         doc.append(NoEscape(r"\vspace*{0.5cm}"))
-        doc.append(NoEscape(f"\\textbf{{Responsável Técnico:}} {escape_latex(self.config.engineer_name)}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{{tech_responsible}}} {escape_latex(self.config.engineer_name)}\\\\"))
         doc.append(NoEscape(f"\\textbf{{CREA:}} {escape_latex(self.config.crea_number)}\\\\"))
-        doc.append(NoEscape(f"\\textbf{{Data:}} {datetime.now().strftime('%B %Y')}\\\\"))
-        doc.append(NoEscape(f"\\textbf{{Localização:}} {escape_latex(self.config.location)}\\\\"))
-        doc.append(NoEscape(f"\\textbf{{Endereço:}} {escape_latex(self.config.address)}\\\\"))
-        doc.append(NoEscape(r"\textbf{Software:} GreTA® - Sistema de Análise Termográfica\\"))
+        doc.append(NoEscape(f"\\textbf{{{date_label}}} {datetime.now().strftime('%B %Y')}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{{location_label}}} {escape_latex(self.config.location)}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{{address_label}}} {escape_latex(self.config.address)}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{{software_label}}} {software_desc}\\\\"))
         doc.append(NoEscape(r"\end{center}"))
         doc.append(NoEscape(r"\rule{\linewidth}{0.5pt}"))
         doc.append(NoEscape(r"\vfill"))
-        doc.append(NoEscape(r"\noindent\textbf{Copyright © 2026 Aisol Soluções em Inteligência Artificial.}\\"))
-        doc.append(NoEscape(r"Todos os direitos reservados. Nenhuma parte desta publicação pode ser reproduzida, distribuída ou transmitida sem autorização prévia.\\"))
+        doc.append(NoEscape(r"\noindent\textbf{" + copyright_text + r"}\\"))
+        doc.append(NoEscape(rights_text + r"\\"))
         doc.append(NoEscape(r"\vspace*{0.2cm}"))
-        doc.append(NoEscape(r"\noindent\textbf{ISBN:} A definir.\\"))
+        doc.append(NoEscape(r"\noindent\textbf{" + isbn_label + r"} " + isbn_value + r"\\"))
         doc.append(NoEscape(r"\newpage"))
 
     def _add_abstract(self, doc: pl.Document) -> None:
         """Add abstract page."""
         doc.append(NoEscape(r"\newpage"))
         doc.append(NoEscape(r"\begin{abstract}"))
-        doc.append(NoEscape(constants.REPORT_ABSTRACT_PT))
+        doc.append(NoEscape(get_report_abstract(self.config.language)))
         doc.append(NoEscape(r"\end{abstract}"))
 
     def _add_introduction_section(self, doc: pl.Document) -> None:
         """Add introduction section with methodology and report structure."""
-        doc.append(NoEscape(r"\section{Introdução}"))
-        doc.append(NoEscape(constants.REPORT_INTRO_PT))
+        intro_title = get_report_text("introduction_title", self.config.language)
+        doc.append(NoEscape(r"\section{" + intro_title + r"}"))
+        doc.append(NoEscape(get_report_intro(self.config.language)))
 
         # Add drone intro text if ODM stats are available
         if self.odm_stats:
-            drone_intro = (
-                "A última seção aborda o \\textbf{Voo do Drone e a Construção da Imagem Ortorretificada}, "
-                "onde são documentados os parâmetros do voo do drone, incluindo altitude, velocidade e trajetória, "
-                "além dos detalhes dos sensores infravermelhos empregados."
-            )
+            if self.config.language in ("en-US", "en"):
+                drone_intro = (
+                    "The final section covers the \\textbf{Drone Flight and Orthophoto Construction}, "
+                    "documenting drone flight parameters including altitude, speed, and trajectory, "
+                    "as well as details of the infrared sensors employed."
+                )
+            else:
+                drone_intro = (
+                    "A última seção aborda o \\textbf{Voo do Drone e a Construção da Imagem Ortorretificada}, "
+                    "onde são documentados os parâmetros do voo do drone, incluindo altitude, velocidade e trajetória, "
+                    "além dos detalhes dos sensores infravermelhos empregados."
+                )
             doc.append(NoEscape(drone_intro))
 
     def _add_client_section(self, doc: pl.Document) -> None:
         """Add client data section."""
-        with doc.create(pl.Section("Dados do Cliente")):
-            doc.append(bold("Cliente: "))
+        section_title = get_report_text("client_data_title", self.config.language)
+        client_label = get_report_text("client_name", self.config.language)
+        area_label = "Area" if self.config.language in ("en-US", "en") else "Área"
+        location_label = get_report_text("location", self.config.language)
+
+        with doc.create(pl.Section(section_title)):
+            doc.append(bold(f"{client_label}: "))
             doc.append(f"{escape_latex(self.config.client_name)}\n\n")
-            doc.append(bold("Área: "))
+            doc.append(bold(f"{area_label}: "))
             doc.append(f"{escape_latex(self.config.area_name)}\n\n")
-            doc.append(bold("Localização: "))
+            doc.append(bold(f"{location_label}: "))
             doc.append(f"{escape_latex(self.config.location)}\n\n")
 
     def _add_area_overview(self, doc: pl.Document) -> None:
         """Add area overview section with orthophoto images."""
-        with doc.create(pl.Section("Visão Geral da Área")):
-            doc.append(NoEscape(constants.AREA_OVERVIEW_TEXT_PT))
+        section_title = get_report_text("area_overview_title", self.config.language)
+        defect_labels = get_defect_labels(self.config.language)
+
+        with doc.create(pl.Section(section_title)):
+            doc.append(NoEscape(get_area_overview_text(self.config.language)))
 
             # Summary table of total defects before detailed breakdown
             summary_rows = [
-                ("Pontos Quentes (Hot Spots)", self.total_hotspots),
-                ("Diodos de Bypass Queimados", self.total_faulty_diodes),
-                ("Painéis Desligados", self.total_offline),
+                (defect_labels.get("hotspots", "Hotspots"), self.total_hotspots),
+                (defect_labels.get("faulty_diodes", "Faulty Bypass Diodes"), self.total_faulty_diodes),
+                (defect_labels.get("offline_panels", "Offline Panels"), self.total_offline),
             ]
 
+            summary_caption = get_report_text("defect_summary_title", self.config.language)
+            defect_type_header = get_report_text("defect_type", self.config.language)
+            quantity_header = get_report_text("quantity", self.config.language)
+
             with doc.create(pl.Table(position="h!")) as table:
-                table.add_caption("Resumo Geral dos Defeitos Identificados")
+                table.add_caption(summary_caption)
                 table.append(NoEscape(r"\centering"))
                 with doc.create(pl.Tabular("lc")) as tabular:
                     tabular.append(NoEscape(r"\toprule"))
-                    tabular.add_row(["Tipo de Defeito", "Quantidade"], escape=False)
+                    tabular.add_row([defect_type_header, quantity_header], escape=False)
                     tabular.append(NoEscape(r"\midrule"))
                     for label, count in summary_rows:
                         tabular.add_row([label, str(count)], escape=False)
@@ -429,7 +501,8 @@ RoyalBlue]
                     r"\centering\includegraphics[width=0.85\textwidth,height=0.55\textheight,keepaspectratio]{"
                     + ortho_path + r"}"
                 ))
-                fig.add_caption("Ortofoto da área inspecionada")
+                ortho_caption = "Orthophoto of the inspected area" if self.config.language in ("en-US", "en") else "Ortofoto da área inspecionada"
+                fig.add_caption(ortho_caption)
 
             # Layer map (use relative path)
             layer_path = "report_images/layer_img.pdf"
@@ -439,20 +512,35 @@ RoyalBlue]
                     r"\centering\includegraphics[width=0.85\textwidth,height=0.55\textheight,keepaspectratio]{"
                     + layer_path + r"}"
                 ))
-                fig.add_caption("Mapa de rastreadores e defeitos detectados")
+                layer_caption = "Map of trackers and detected defects" if self.config.language in ("en-US", "en") else "Mapa de rastreadores e defeitos detectados"
+                fig.add_caption(layer_caption)
 
     def _add_defect_summary_table(self, doc: pl.Document) -> None:
         """Add summary table of all detected defects."""
         if not self.panels_with_defects:
             return
 
+        if self.preview:
+            suppressed_text = get_preview_text("table_suppressed", self.config.language)
+            doc.append(NoEscape(r"\vspace{1cm}"))
+            doc.append(NoEscape(r"\begin{center}"))
+            doc.append(NoEscape(r"{\large\textit{" + suppressed_text + r"}}"))
+            doc.append(NoEscape(r"\end{center}"))
+            doc.append(NoEscape(r"\vspace{1cm}"))
+            return
+
+        # Get localized defect labels
+        hotspots_label = get_defect_details_text("hotspots_title", self.config.language)
+        faulty_diodes_label = get_defect_details_text("faulty_diodes_title", self.config.language)
+        offline_panels_label = get_defect_details_text("offline_panels_title", self.config.language)
+
         # Flatten panel defects into list of (defect_type_order, panel_key, defect_label, panel_id, coords)
         # Order: by defect class, then by panel identifier order
         defect_rows = []
         defect_type_order = {
-            "hotspots": (0, "Pontos Quentes (Hot Spots)"),
-            "faulty_diodes": (1, "Diodos de Bypass Queimados"),
-            "offline_panels": (2, "Painéis Desligados"),
+            "hotspots": (0, hotspots_label),
+            "faulty_diodes": (1, faulty_diodes_label),
+            "offline_panels": (2, offline_panels_label),
         }
 
         for panel in self.panels_with_defects:
@@ -470,6 +558,13 @@ RoyalBlue]
         # Extract display fields (defect_label, panel_id, coords_str)
         defect_rows = [(r[2], r[3], r[4]) for r in defect_rows]
 
+        # Get localized table texts
+        caption_main = get_summary_table_text("defect_location_title", self.config.language)
+        caption_cont = get_summary_table_text("defect_location_cont", self.config.language)
+        problem_type = get_summary_table_text("problem_type", self.config.language)
+        panel_location = get_summary_table_text("panel_location", self.config.language)
+        coordinates = get_summary_table_text("coordinates", self.config.language)
+
         # Create tables with max 35 rows each (for pagination)
         rows_per_table = 35
         total_rows = len(defect_rows)
@@ -478,13 +573,13 @@ RoyalBlue]
             batch = defect_rows[batch_idx:batch_idx + rows_per_table]
 
             with doc.create(pl.Table(position="h!")) as table:
-                caption = "Localização de Cada Defeito Identificado" if batch_idx == 0 else "Localização de Cada Defeito Identificado (cont.)"
+                caption = caption_main if batch_idx == 0 else caption_cont
                 table.add_caption(caption)
                 table.append(NoEscape(r"\centering"))
 
                 with doc.create(pl.Tabular("lcl")) as tabular:
                     tabular.append(NoEscape(r"\toprule"))
-                    tabular.add_row(["Tipo de Problema", "Local do Painel", "Coordenadas"], escape=False)
+                    tabular.add_row([problem_type, panel_location, coordinates], escape=False)
                     tabular.append(NoEscape(r"\midrule"))
 
                     for defect_label, panel_id, coords_str in batch:
@@ -496,19 +591,26 @@ RoyalBlue]
 
     def _add_defect_details_by_type(self, doc: pl.Document) -> None:
         """Add three dedicated sections for each defect type."""
+        # Get localized texts for each defect type
         defect_types = [
-            ("hotspots", "Pontos Quentes (Hot Spots)",
-             "Foram detectados pontos quentes nas placas abaixo.",
-             "No painel {panel_id}, há sinais de pontos quentes conforme as figuras acima."),
-            ("faulty_diodes", "Diodos de Bypass Queimados",
-             "Foram detectados diodos de bypass queimados nas placas abaixo.",
-             "No painel {panel_id}, foram detectados diodos de bypass queimados."),
-            ("offline_panels", "Painéis Desligados",
-             "Foram detectadas anomalias indicando painel(es) desligados nas placas abaixo.",
-             "No painel {panel_id}, foram detectadas anomalias indicando painel(es) desligados."),
+            ("hotspots",
+             get_defect_details_text("hotspots_title", self.config.language),
+             get_defect_details_text("hotspots_intro", self.config.language),
+             get_defect_details_text("hotspots_panel_text", self.config.language),
+             get_defect_details_text("hotspots_none", self.config.language)),
+            ("faulty_diodes",
+             get_defect_details_text("faulty_diodes_title", self.config.language),
+             get_defect_details_text("faulty_diodes_intro", self.config.language),
+             get_defect_details_text("faulty_diodes_panel_text", self.config.language),
+             get_defect_details_text("faulty_diodes_none", self.config.language)),
+            ("offline_panels",
+             get_defect_details_text("offline_panels_title", self.config.language),
+             get_defect_details_text("offline_panels_intro", self.config.language),
+             get_defect_details_text("offline_panels_panel_text", self.config.language),
+             get_defect_details_text("offline_panels_none", self.config.language)),
         ]
 
-        for defect_attr, section_title, intro_text, panel_text_template in defect_types:
+        for defect_attr, section_title, intro_text, panel_text_template, no_defects_text in defect_types:
             doc.append(NoEscape(r"\newpage"))
             doc.append(NoEscape(r"\section{" + section_title + "}"))
 
@@ -518,24 +620,40 @@ RoyalBlue]
             if panels_with_type:
                 doc.append(intro_text + "\n\n")
 
-                for panel in sorted(panels_with_type, key=self._panel_sort_key):
-                    self._add_panel_defect_by_type(doc, panel, defect_attr, panel_text_template)
+                sorted_panels = sorted(panels_with_type, key=self._panel_sort_key)
+
+                if self.preview:
+                    # Show only the first panel, suppress the rest
+                    self._add_panel_defect_by_type(doc, sorted_panels[0], defect_attr, panel_text_template)
+                    if len(sorted_panels) > 1:
+                        suppressed_text = get_preview_text("images_suppressed", self.config.language)
+                        doc.append(NoEscape(r"\vspace{1cm}"))
+                        doc.append(NoEscape(r"\begin{center}"))
+                        doc.append(NoEscape(r"{\large\textit{" + suppressed_text + r"}}"))
+                        doc.append(NoEscape(r"\end{center}"))
+                        doc.append(NoEscape(r"\vspace{1cm}"))
+                else:
+                    for panel in sorted_panels:
+                        self._add_panel_defect_by_type(doc, panel, defect_attr, panel_text_template)
             else:
                 # No defects of this type
-                if defect_attr == "hotspots":
-                    doc.append("Não foram encontrados problemas de pontos quentes na área inspecionada.\n")
-                elif defect_attr == "faulty_diodes":
-                    doc.append("Não foram encontrados problemas de diodos de bypass queimados na área inspecionada.\n")
-                elif defect_attr == "offline_panels":
-                    doc.append("Não foram encontrados problemas de painéis desligados na área inspecionada.\n")
+                doc.append(no_defects_text + "\n")
 
     def _add_panel_defect_by_type(self, doc: pl.Document, panel: Panel, defect_type: str, text_template: str) -> None:
         """Add subsubsection for a single panel with specific defect type."""
-        doc.append(NoEscape(r"\subsubsection{Painel " + panel.panel_id + "}"))
+        # Get localized texts
+        panel_subsection = get_defect_details_text("panel_subsection", self.config.language)
+        doc.append(NoEscape(r"\subsubsection{" + panel_subsection.format(panel_id=panel.panel_id) + "}"))
 
         # Detailed caption
         col, row = panel.column, panel.row
-        overall_caption = f"Imagens do Painel n. {row} da coluna n. {col}."
+        overall_caption_template = get_defect_details_text("panel_images_caption", self.config.language)
+        overall_caption = overall_caption_template.format(row=row, col=col)
+
+        # Get localized subfigure captions
+        context_map = get_defect_details_text("context_map", self.config.language)
+        problem_location = get_defect_details_text("problem_location", self.config.language)
+        drone_image = get_defect_details_text("drone_image", self.config.language)
 
         # Build image paths
         # Note: GPS matcher uses defect_type without underscores (e.g., "faultydiodes")
@@ -558,15 +676,15 @@ RoyalBlue]
             fig.append(NoEscape(r"\centering"))
 
             if minimap_img_path.exists():
-                fig.append(NoEscape(r"\subfloat[Mapa de Contexto]{\includegraphics[width=0.30\linewidth]{" + minimap_img + r"}}"))
+                fig.append(NoEscape(r"\subfloat[" + context_map + r"]{\includegraphics[width=0.30\linewidth]{" + minimap_img + r"}}"))
                 fig.append(NoEscape(r"\hfill"))
 
             if crop_img_path.exists():
-                fig.append(NoEscape(r"\subfloat[Localização do Problema]{\includegraphics[width=0.30\linewidth]{" + crop_img + r"}}"))
+                fig.append(NoEscape(r"\subfloat[" + problem_location + r"]{\includegraphics[width=0.30\linewidth]{" + crop_img + r"}}"))
                 fig.append(NoEscape(r"\hfill"))
 
             if drone_img_path.exists():
-                fig.append(NoEscape(r"\subfloat[Imagem Original do Drone]{\includegraphics[width=0.30\linewidth]{" + drone_img + r"}}"))
+                fig.append(NoEscape(r"\subfloat[" + drone_image + r"]{\includegraphics[width=0.30\linewidth]{" + drone_img + r"}}"))
 
             fig.append(NoEscape(r"\caption{" + overall_caption + r"}"))
 
@@ -591,15 +709,19 @@ RoyalBlue]
         if not annotated_images_found and annotated_img_path.exists():
             annotated_images_found.append((annotated_img_path, annotated_img, None))
 
+        # Get localized thermal analysis captions
+        thermal_analysis = get_defect_details_text("thermal_analysis", self.config.language)
+        thermal_analysis_defect = get_defect_details_text("thermal_analysis_defect", self.config.language)
+
         # Add all found annotated images with temperature legend tables
         for img_path, img_rel, defect_num in annotated_images_found:
             doc.append(NoEscape(r"\vspace{0.3cm}"))
             with doc.create(pl.Figure(position="h!")) as fig:
                 fig.add_image(img_rel, width=NoEscape(r"0.65\textwidth"))
                 if defect_num is not None:
-                    fig.add_caption(f"Análise Termográfica - Painel {panel.panel_id} (Defeito {defect_num})")
+                    fig.add_caption(thermal_analysis_defect.format(panel_id=panel.panel_id, defect_num=defect_num))
                 else:
-                    fig.add_caption(f"Análise Termográfica - Painel {panel.panel_id}")
+                    fig.add_caption(thermal_analysis.format(panel_id=panel.panel_id))
             doc.append(NoEscape(r"\FloatBarrier"))
 
             # Add temperature legend table from annotation manifest
@@ -654,15 +776,17 @@ RoyalBlue]
         }
         severity_color = severity_colors.get(entry.severity, "black")
 
-        # Severity text in Portuguese
-        severity_text_pt = {
-            "CRITICAL": "Crítico",
-            "HIGH": "Alto",
-            "MEDIUM": "Médio",
-            "LOW": "Baixo",
-            "MINIMAL": "Mínimo",
-        }
-        severity_pt = severity_text_pt.get(entry.severity, entry.severity)
+        # Get localized severity text
+        severity_key = f"severity_{entry.severity.lower()}"
+        severity_text = get_thermal_legend_text(severity_key, self.config.language)
+
+        # Get localized table labels
+        param_label = get_thermal_legend_text("parameter", self.config.language)
+        value_label = get_thermal_legend_text("value", self.config.language)
+        hotpoint_label = get_thermal_legend_text("hotpoint", self.config.language)
+        reference_label = get_thermal_legend_text("reference", self.config.language)
+        delta_t_label = get_thermal_legend_text("delta_t", self.config.language)
+        classification_label = get_thermal_legend_text("classification", self.config.language)
 
         # Create academic-style legend table (matching Table 1 format)
         doc.append(NoEscape(r"\vspace{0.2cm}"))
@@ -670,12 +794,12 @@ RoyalBlue]
         doc.append(NoEscape(r"\small"))
         doc.append(NoEscape(r"\begin{tabular}{lc}"))
         doc.append(NoEscape(r"\toprule"))
-        doc.append(NoEscape(r"\textbf{Parâmetro} & \textbf{Valor} \\"))
+        doc.append(NoEscape(r"\textbf{" + param_label + r"} & \textbf{" + value_label + r"} \\"))
         doc.append(NoEscape(r"\midrule"))
-        doc.append(NoEscape(f"Ponto Quente & {entry.hot_point.temp:.1f}°C \\\\"))
-        doc.append(NoEscape(f"Referência & {entry.cold_point.temp:.1f}°C \\\\"))
-        doc.append(NoEscape(f"$\\Delta$T (Diferença) & {entry.delta_t:.1f}°C \\\\"))
-        doc.append(NoEscape(f"Classificação & \\textcolor{{{severity_color}}}{{\\textbf{{{severity_pt}}}}} \\\\"))
+        doc.append(NoEscape(f"{hotpoint_label} & {entry.hot_point.temp:.1f}°C \\\\"))
+        doc.append(NoEscape(f"{reference_label} & {entry.cold_point.temp:.1f}°C \\\\"))
+        doc.append(NoEscape(f"{delta_t_label} & {entry.delta_t:.1f}°C \\\\"))
+        doc.append(NoEscape(f"{classification_label} & \\textcolor{{{severity_color}}}{{\\textbf{{{severity_text}}}}} \\\\"))
         doc.append(NoEscape(r"\bottomrule"))
         doc.append(NoEscape(r"\end{tabular}"))
         doc.append(NoEscape(r"\end{center}"))
@@ -683,9 +807,11 @@ RoyalBlue]
 
     def _add_defect_details(self, doc: pl.Document) -> None:
         """Add detailed section for each panel with defects."""
-        with doc.create(pl.Section("Detalhes dos Defeitos")):
+        details_title = get_report_text("defect_details_title", self.config.language)
+        total_panels_text = get_summary_table_text("total_panels_with_defects", self.config.language)
+        with doc.create(pl.Section(details_title)):
             doc.append(
-                f"Total de {len(self.panels_with_defects)} painéis com defeitos identificados.\n\n"
+                total_panels_text.format(count=len(self.panels_with_defects)) + "\n\n"
             )
 
             for panel in sorted(self.panels_with_defects, key=self._panel_sort_key):
@@ -792,55 +918,6 @@ RoyalBlue]
                 "pdflatex not found - ensure LaTeX is installed in the container"
             )
 
-    def generate_lowres_pdf(self, output_path: Path, input_pdf: Path) -> Path:
-        """
-        Generate low-resolution version of PDF for faster downloads.
-
-        Args:
-            output_path: Path to save low-res PDF
-            input_pdf: Path to full-resolution PDF
-
-        Returns:
-            Path to low-res PDF
-        """
-        logger.info(f"Generating low-resolution PDF: {output_path}")
-
-        try:
-            # Use Ghostscript to compress PDF
-            result = subprocess.run(
-                [
-                    "gs",
-                    "-sDEVICE=pdfwrite",
-                    "-dCompatibilityLevel=1.4",
-                    "-dPDFSETTINGS=/screen",
-                    "-dNOPAUSE",
-                    "-dQUIET",
-                    "-dBATCH",
-                    f"-sOutputFile={output_path}",
-                    str(input_pdf),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )
-
-            if result.returncode != 0:
-                logger.warning(f"Ghostscript failed: {result.stderr}")
-                # Fallback: copy original
-                import shutil
-
-                shutil.copy(input_pdf, output_path)
-
-            logger.info(f"Low-res PDF: {output_path.stat().st_size / 1_000_000:.1f} MB")
-            return output_path
-
-        except Exception as e:
-            logger.warning(f"Failed to create low-res PDF: {e}, using original")
-            import shutil
-
-            shutil.copy(input_pdf, output_path)
-            return output_path
-
     def _add_appendix(self, doc: pl.Document) -> None:
         """Add appendix with flight data and orthophoto information."""
         logger.info("Adding appendix with flight and orthophoto information")
@@ -848,8 +925,35 @@ RoyalBlue]
         doc.append(NoEscape(r"\newpage"))
         doc.append(NoEscape(r"\appendix"))
 
+        if self.preview:
+            suppressed_text = get_preview_text("appendix_suppressed", self.config.language)
+            flight_info_title = get_appendix_text("flight_info_title", self.config.language)
+            ortho_data_title = get_appendix_text("orthophoto_data_title", self.config.language)
+
+            # Appendix A placeholder
+            doc.append(NoEscape(r"\section{" + flight_info_title + "}"))
+            doc.append(NoEscape(r"\vspace{1cm}"))
+            doc.append(NoEscape(r"\begin{center}"))
+            doc.append(NoEscape(r"{\large\textit{" + suppressed_text + r"}}"))
+            doc.append(NoEscape(r"\end{center}"))
+
+            # Appendix B placeholder
+            doc.append(NoEscape(r"\section{" + ortho_data_title + "}"))
+            doc.append(NoEscape(r"\vspace{1cm}"))
+            doc.append(NoEscape(r"\begin{center}"))
+            doc.append(NoEscape(r"{\large\textit{" + suppressed_text + r"}}"))
+            doc.append(NoEscape(r"\end{center}"))
+            return
+
+        # Get localized texts
+        flight_info_title = get_appendix_text("flight_info_title", self.config.language)
+        flight_path_caption = get_appendix_text("flight_path_caption", self.config.language)
+        dashboard_caption = get_appendix_text("dashboard_caption", self.config.language)
+        flight_unavailable = get_appendix_text("flight_data_unavailable", self.config.language)
+        flight_error = get_appendix_text("flight_viz_error", self.config.language)
+
         # Appendix A: Drone and Flight Information
-        doc.append(NoEscape(r"\section{Informações do Voo e Ortofoto}"))
+        doc.append(NoEscape(r"\section{" + flight_info_title + "}"))
 
         # Try to generate flight visualizations from reconstruction.json
         try:
@@ -867,13 +971,16 @@ RoyalBlue]
             if not reconstruction_path.exists():
                 raise FileNotFoundError(f"reconstruction.json not found at {reconstruction_path}")
 
-            # Find orthophoto for background overlay
-            orthophoto_path = work_dir / "odm_orthophoto.tif"
-            if not orthophoto_path.exists():
-                # Try alternate location
-                orthophoto_path = work_dir / "orthophoto.tif"
-            if not orthophoto_path.exists():
-                orthophoto_path = None  # Will skip orthophoto overlay
+            # Find orthophoto for background overlay (prefer raw ODM output)
+            orthophoto_candidates = [
+                work_dir / "odm_orthophoto_original.tif",
+                work_dir / "odm_orthophoto.tif",
+                work_dir / "orthophoto.tif",
+            ]
+            orthophoto_path = next(
+                (path for path in orthophoto_candidates if path.exists()),
+                None,
+            )
 
             # Generate flight visualizations
             viz_paths, flight_stats = generate_flight_appendix(
@@ -891,7 +998,7 @@ RoyalBlue]
                         str(viz_paths["flight_path_static"].relative_to(self.images_dir.parent)),
                         width=NoEscape(r"0.75\textwidth")
                     )
-                    fig.add_caption("Trajetória de Voo do Drone")
+                    fig.add_caption(flight_path_caption)
 
             # Add flight statistics table
             if flight_stats:
@@ -904,14 +1011,14 @@ RoyalBlue]
                         str(viz_paths["dashboard"].relative_to(self.images_dir.parent)),
                         width=NoEscape(r"0.95\textwidth")
                     )
-                    fig.add_caption("Dashboard do Voo - Estatísticas e Perfis")
+                    fig.add_caption(dashboard_caption)
 
         except FileNotFoundError as e:
             logger.warning(f"reconstruction.json not found, skipping flight visualizations: {e}")
-            doc.append("Dados de voo não disponíveis para este projeto.")
+            doc.append(flight_unavailable)
         except Exception as e:
             logger.error(f"Failed to generate flight visualizations: {e}", exc_info=True)
-            doc.append("Erro ao gerar visualizações de voo.")
+            doc.append(flight_error)
 
         # Legacy ODM stats (if available)
         if self.odm_stats and self.odm_stats_dir:
@@ -919,21 +1026,27 @@ RoyalBlue]
             if "processing_statistics" in self.odm_stats:
                 self._add_processing_stats_table(doc, self.odm_stats["processing_statistics"])
 
+        # Get localized texts for orthophoto section
+        ortho_data_title = get_appendix_text("orthophoto_data_title", self.config.language)
+        matchgraph_caption = get_appendix_text("matchgraph_caption", self.config.language)
+        overlap_caption = get_appendix_text("overlap_caption", self.config.language)
+        residual_caption = get_appendix_text("residual_histogram_caption", self.config.language)
+
         # Appendix B: Orthophoto Data
-        doc.append(NoEscape(r"\section{Dados da Ortofoto}"))
+        doc.append(NoEscape(r"\section{" + ortho_data_title + "}"))
 
         # Matchgraph - Feature correspondence graph
-        self._add_odm_image(doc, "matchgraph.png", "Grafo de Correspondência de Características")
+        self._add_odm_image(doc, "matchgraph.png", matchgraph_caption)
 
         # Overlap diagram
-        self._add_odm_image(doc, "overlap.png", "Diagrama de Sobreposição de Imagens")
+        self._add_odm_image(doc, "overlap.png", overlap_caption)
 
         # Reconstruction Statistics Table
         if self.odm_stats and "reconstruction_statistics" in self.odm_stats:
             self._add_reconstruction_stats_table(doc, self.odm_stats["reconstruction_statistics"])
 
         # Residual histogram
-        self._add_odm_image(doc, "residual_histogram.png", "Histograma de Resíduos do Modelo")
+        self._add_odm_image(doc, "residual_histogram.png", residual_caption)
 
         # Features Statistics Table
         if self.odm_stats and "features_statistics" in self.odm_stats:
@@ -961,13 +1074,18 @@ RoyalBlue]
         if "steps_times" not in stats:
             return
 
+        # Get localized texts
+        processing_step = get_appendix_text("processing_step", self.config.language)
+        time_label = get_appendix_text("time", self.config.language)
+        caption = get_appendix_text("processing_stats_caption", self.config.language)
+
         times = stats["steps_times"]
         doc.append(NoEscape(r"\begin{center}"))
         doc.append(NoEscape(r"\begin{table}[h!]"))
         doc.append(NoEscape(r"\centering"))
         doc.append(NoEscape(r"\begin{tabular}{lr}"))
         doc.append(NoEscape(r"\toprule"))
-        doc.append(NoEscape(r"Etapa de Processamento & Tempo \\"))
+        doc.append(NoEscape(f"{processing_step} & {time_label} \\\\"))
         doc.append(NoEscape(r"\midrule"))
 
         for step, time_val in times.items():
@@ -983,108 +1101,146 @@ RoyalBlue]
 
         doc.append(NoEscape(r"\bottomrule"))
         doc.append(NoEscape(r"\end{tabular}"))
-        doc.append(NoEscape(r"\caption{Estatísticas de Processamento}"))
+        doc.append(NoEscape(r"\caption{" + caption + r"}"))
         doc.append(NoEscape(r"\end{table}"))
         doc.append(NoEscape(r"\end{center}"))
 
     def _add_flight_stats_table(self, doc: pl.Document, flight_stats: dict) -> None:
         """Add flight statistics table."""
+        # Get localized texts
+        flight_metric = get_appendix_text("flight_metric", self.config.language)
+        value_label = get_thermal_legend_text("value", self.config.language)
+        flight_stats_caption = get_appendix_text("flight_stats_caption", self.config.language)
+        total_images = get_appendix_text("total_images", self.config.language)
+        flight_duration = get_appendix_text("flight_duration", self.config.language)
+        total_distance = get_appendix_text("total_distance", self.config.language)
+        min_altitude = get_appendix_text("min_altitude", self.config.language)
+        max_altitude = get_appendix_text("max_altitude", self.config.language)
+        mean_altitude = get_appendix_text("mean_altitude", self.config.language)
+        coverage_area = get_appendix_text("coverage_area", self.config.language)
+        mean_speed = get_appendix_text("mean_speed", self.config.language)
+        mean_gsd = get_appendix_text("mean_gsd", self.config.language)
+
         doc.append(NoEscape(r"\begin{center}"))
         doc.append(NoEscape(r"\begin{table}[h!]"))
         doc.append(NoEscape(r"\centering"))
         doc.append(NoEscape(r"\begin{tabular}{lr}"))
         doc.append(NoEscape(r"\toprule"))
-        doc.append(NoEscape(r"Métrica de Voo & Valor \\"))
+        doc.append(NoEscape(f"{flight_metric} & {value_label} \\\\"))
         doc.append(NoEscape(r"\midrule"))
 
         # Total images
         if "total_images" in flight_stats:
-            doc.append(NoEscape(f"Total de Imagens & {flight_stats['total_images']} \\\\"))
+            doc.append(NoEscape(f"{total_images} & {flight_stats['total_images']} \\\\"))
 
         # Flight duration
         if "flight_duration_min" in flight_stats and flight_stats["flight_duration_min"] != "N/A":
-            doc.append(NoEscape(f"Duração do Voo & {flight_stats['flight_duration_min']} min \\\\"))
+            doc.append(NoEscape(f"{flight_duration} & {flight_stats['flight_duration_min']} min \\\\"))
 
         # Total distance
         if "total_distance_km" in flight_stats:
-            doc.append(NoEscape(f"Distância Total & {flight_stats['total_distance_km']} km \\\\"))
+            doc.append(NoEscape(f"{total_distance} & {flight_stats['total_distance_km']} km \\\\"))
 
         doc.append(NoEscape(r"\midrule"))
 
         # Altitude stats
         if "min_altitude_m" in flight_stats:
-            doc.append(NoEscape(f"Altitude Mínima & {flight_stats['min_altitude_m']} m \\\\"))
+            doc.append(NoEscape(f"{min_altitude} & {flight_stats['min_altitude_m']} m \\\\"))
         if "max_altitude_m" in flight_stats:
-            doc.append(NoEscape(f"Altitude Máxima & {flight_stats['max_altitude_m']} m \\\\"))
+            doc.append(NoEscape(f"{max_altitude} & {flight_stats['max_altitude_m']} m \\\\"))
         if "mean_altitude_m" in flight_stats:
-            doc.append(NoEscape(f"Altitude Média & {flight_stats['mean_altitude_m']} m \\\\"))
+            doc.append(NoEscape(f"{mean_altitude} & {flight_stats['mean_altitude_m']} m \\\\"))
 
         doc.append(NoEscape(r"\midrule"))
 
         # Coverage area
         if "coverage_area_ha" in flight_stats:
-            doc.append(NoEscape(f"Área de Cobertura & {flight_stats['coverage_area_ha']} ha \\\\"))
+            doc.append(NoEscape(f"{coverage_area} & {flight_stats['coverage_area_ha']} ha \\\\"))
 
         # Speed stats (optional)
-        if "mean_speed_kmh" in flight_stats:
+        if "mean_speed_ms" in flight_stats:
             doc.append(NoEscape(r"\midrule"))
-            doc.append(NoEscape(f"Velocidade Média & {flight_stats['mean_speed_kmh']} km/h \\\\"))
+            doc.append(NoEscape(f"{mean_speed} & {flight_stats['mean_speed_ms']} m/s \\\\"))
+        elif "mean_speed_kmh" in flight_stats:
+            doc.append(NoEscape(r"\midrule"))
+            doc.append(NoEscape(f"{mean_speed} & {flight_stats['mean_speed_kmh']} km/h \\\\"))
 
         # GSD stats (optional)
         if "mean_gsd_cm" in flight_stats:
             doc.append(NoEscape(r"\midrule"))
-            doc.append(NoEscape(f"GSD Médio & {flight_stats['mean_gsd_cm']} cm/px \\\\"))
+            doc.append(NoEscape(f"{mean_gsd} & {flight_stats['mean_gsd_cm']} cm/px \\\\"))
 
         doc.append(NoEscape(r"\bottomrule"))
         doc.append(NoEscape(r"\end{tabular}"))
-        doc.append(NoEscape(r"\caption{Estatísticas do Voo}"))
+        doc.append(NoEscape(r"\caption{" + flight_stats_caption + r"}"))
         doc.append(NoEscape(r"\end{table}"))
         doc.append(NoEscape(r"\end{center}"))
 
         # GPS error table (componentwise - ODM format)
         if "mean_gps_error_x_m" in flight_stats:
+            # Get localized GPS error texts
+            gps_error_metric = get_appendix_text("gps_error_metric", self.config.language)
+            gps_error_caption = get_appendix_text("gps_error_caption", self.config.language)
+            mean_x = get_appendix_text("mean_x", self.config.language)
+            mean_y = get_appendix_text("mean_y", self.config.language)
+            mean_z = get_appendix_text("mean_z", self.config.language)
+            std_x = get_appendix_text("std_x", self.config.language)
+            std_y = get_appendix_text("std_y", self.config.language)
+            std_z = get_appendix_text("std_z", self.config.language)
+            error_3d_mean = get_appendix_text("error_3d_mean", self.config.language)
+            error_3d_max = get_appendix_text("error_3d_max", self.config.language)
+
             doc.append(NoEscape(r"\vspace{1em}"))
             doc.append(NoEscape(r"\begin{center}"))
             doc.append(NoEscape(r"\begin{table}[H]"))
             doc.append(NoEscape(r"\centering"))
             doc.append(NoEscape(r"\begin{tabular}{ll}"))
             doc.append(NoEscape(r"\toprule"))
-            doc.append(NoEscape(r"Métrica de Erro GPS & Valor \\"))
+            doc.append(NoEscape(f"{gps_error_metric} & {value_label} \\\\"))
             doc.append(NoEscape(r"\midrule"))
-            doc.append(NoEscape(f"Média X & {flight_stats['mean_gps_error_x_m']} m \\\\"))
-            doc.append(NoEscape(f"Média Y & {flight_stats['mean_gps_error_y_m']} m \\\\"))
-            doc.append(NoEscape(f"Média Z & {flight_stats['mean_gps_error_z_m']} m \\\\"))
+            doc.append(NoEscape(f"{mean_x} & {flight_stats['mean_gps_error_x_m']} m \\\\"))
+            doc.append(NoEscape(f"{mean_y} & {flight_stats['mean_gps_error_y_m']} m \\\\"))
+            doc.append(NoEscape(f"{mean_z} & {flight_stats['mean_gps_error_z_m']} m \\\\"))
             doc.append(NoEscape(r"\midrule"))
-            doc.append(NoEscape(f"Desvio Padrão X & {flight_stats['std_gps_error_x_m']} m \\\\"))
-            doc.append(NoEscape(f"Desvio Padrão Y & {flight_stats['std_gps_error_y_m']} m \\\\"))
-            doc.append(NoEscape(f"Desvio Padrão Z & {flight_stats['std_gps_error_z_m']} m \\\\"))
+            doc.append(NoEscape(f"{std_x} & {flight_stats['std_gps_error_x_m']} m \\\\"))
+            doc.append(NoEscape(f"{std_y} & {flight_stats['std_gps_error_y_m']} m \\\\"))
+            doc.append(NoEscape(f"{std_z} & {flight_stats['std_gps_error_z_m']} m \\\\"))
             doc.append(NoEscape(r"\midrule"))
             # Also show 3D errors for reference
             if "mean_gps_error_m" in flight_stats:
-                doc.append(NoEscape(f"Erro 3D Médio & {flight_stats['mean_gps_error_m']} m \\\\"))
+                doc.append(NoEscape(f"{error_3d_mean} & {flight_stats['mean_gps_error_m']} m \\\\"))
                 if "max_gps_error_m" in flight_stats:
-                    doc.append(NoEscape(f"Erro 3D Máximo & {flight_stats['max_gps_error_m']} m \\\\"))
+                    doc.append(NoEscape(f"{error_3d_max} & {flight_stats['max_gps_error_m']} m \\\\"))
             doc.append(NoEscape(r"\bottomrule"))
             doc.append(NoEscape(r"\end{tabular}"))
-            doc.append(NoEscape(r"\caption{Erros de Predição GPS (Precisão da Reconstrução)}"))
+            doc.append(NoEscape(r"\caption{" + gps_error_caption + r"}"))
             doc.append(NoEscape(r"\end{table}"))
             doc.append(NoEscape(r"\end{center}"))
 
     def _add_reconstruction_stats_table(self, doc: pl.Document, stats: dict) -> None:
         """Add reconstruction statistics table."""
+        # Get localized texts
+        recon_metric = get_appendix_text("reconstruction_metric", self.config.language)
+        value_label = get_thermal_legend_text("value", self.config.language)
+        recon_caption = get_appendix_text("reconstruction_stats_caption", self.config.language)
+        components_label = get_appendix_text("components", self.config.language)
+        has_gps_label = get_appendix_text("has_gps", self.config.language)
+        initial_points_label = get_appendix_text("initial_points", self.config.language)
+        recon_points_label = get_appendix_text("reconstructed_points", self.config.language)
+
         doc.append(NoEscape(r"\begin{center}"))
         doc.append(NoEscape(r"\begin{table}[h!]"))
         doc.append(NoEscape(r"\centering"))
         doc.append(NoEscape(r"\begin{tabular}{lr}"))
         doc.append(NoEscape(r"\toprule"))
-        doc.append(NoEscape(r"Métrica de Reconstrução & Valor \\"))
+        doc.append(NoEscape(f"{recon_metric} & {value_label} \\\\"))
         doc.append(NoEscape(r"\midrule"))
 
         metrics = [
-            ("components", "Componentes"),
-            ("has_gps", "Possui GPS"),
-            ("initial_points_count", "Pontos Iniciais"),
-            ("reconstructed_points_count", "Pontos Reconstruídos"),
+            ("components", components_label),
+            ("has_gps", has_gps_label),
+            ("initial_points_count", initial_points_label),
+            ("reconstructed_points_count", recon_points_label),
         ]
 
         for key, label in metrics:
@@ -1094,21 +1250,32 @@ RoyalBlue]
 
         doc.append(NoEscape(r"\bottomrule"))
         doc.append(NoEscape(r"\end{tabular}"))
-        doc.append(NoEscape(r"\caption{Estatísticas de Reconstrução}"))
+        doc.append(NoEscape(r"\caption{" + recon_caption + r"}"))
         doc.append(NoEscape(r"\end{table}"))
         doc.append(NoEscape(r"\end{center}"))
 
     def _add_features_stats_table(self, doc: pl.Document, stats: dict) -> None:
         """Add features statistics table."""
+        # Get localized texts
+        features_metric = get_appendix_text("features_metric", self.config.language)
+        value_label = get_thermal_legend_text("value", self.config.language)
+        features_caption = get_appendix_text("features_stats_caption", self.config.language)
+        detected_features = get_appendix_text("detected_features", self.config.language)
+        recon_features = get_appendix_text("reconstructed_features", self.config.language)
+        minimum = get_appendix_text("minimum", self.config.language)
+        maximum = get_appendix_text("maximum", self.config.language)
+        mean = get_appendix_text("mean", self.config.language)
+        median = get_appendix_text("median", self.config.language)
+
         doc.append(NoEscape(r"\begin{center}"))
         doc.append(NoEscape(r"\begin{table}[h!]"))
         doc.append(NoEscape(r"\centering"))
         doc.append(NoEscape(r"\begin{tabular}{lr}"))
         doc.append(NoEscape(r"\toprule"))
-        doc.append(NoEscape(r"Métrica de Características & Valor \\"))
+        doc.append(NoEscape(f"{features_metric} & {value_label} \\\\"))
         doc.append(NoEscape(r"\midrule"))
 
-        metric_labels = {"min": "Mínimo", "max": "Máximo", "mean": "Média", "median": "Mediana"}
+        metric_labels = {"min": minimum, "max": maximum, "mean": mean, "median": median}
 
         if "detected_features" in stats:
             detected = stats["detected_features"]
@@ -1116,7 +1283,7 @@ RoyalBlue]
                 if metric in detected:
                     val = detected[metric]
                     label = metric_labels[metric]
-                    doc.append(NoEscape(f"Características Detectadas - {label} & {val:.0f} \\\\"))
+                    doc.append(NoEscape(f"{detected_features} - {label} & {val:.0f} \\\\"))
 
         if "reconstructed_features" in stats:
             reconstructed = stats["reconstructed_features"]
@@ -1124,10 +1291,10 @@ RoyalBlue]
                 if metric in reconstructed:
                     val = reconstructed[metric]
                     label = metric_labels[metric]
-                    doc.append(NoEscape(f"Características Reconstruídas - {label} & {val:.0f} \\\\"))
+                    doc.append(NoEscape(f"{recon_features} - {label} & {val:.0f} \\\\"))
 
         doc.append(NoEscape(r"\bottomrule"))
         doc.append(NoEscape(r"\end{tabular}"))
-        doc.append(NoEscape(r"\caption{Estatísticas de Características}"))
+        doc.append(NoEscape(r"\caption{" + features_caption + r"}"))
         doc.append(NoEscape(r"\end{table}"))
         doc.append(NoEscape(r"\end{center}"))

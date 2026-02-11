@@ -6,7 +6,6 @@ Downloads LaTeX bundle from S3, compiles to PDF, uploads result back to S3.
 import os
 import sys
 import subprocess
-import shutil
 from pathlib import Path
 import boto3
 from botocore.exceptions import ClientError
@@ -85,33 +84,6 @@ def compile_latex(tex_file: Path, work_dir: Path) -> tuple[bool, str]:
         return False, "PDF file not generated (unknown error)"
 
 
-def compress_pdf(input_pdf: Path, output_pdf: Path) -> bool:
-    """Compress PDF using ghostscript."""
-    log(f"Compressing PDF: {input_pdf.name}")
-
-    result = subprocess.run([
-        "gs",
-        "-sDEVICE=pdfwrite",
-        "-dCompatibilityLevel=1.4",
-        "-dPDFSETTINGS=/ebook",  # Good balance of quality/size
-        "-dNOPAUSE",
-        "-dQUIET",
-        "-dBATCH",
-        f"-sOutputFile={output_pdf}",
-        str(input_pdf)
-    ], capture_output=True)
-
-    if result.returncode == 0 and output_pdf.exists():
-        original_mb = input_pdf.stat().st_size / 1_000_000
-        compressed_mb = output_pdf.stat().st_size / 1_000_000
-        ratio = (1 - compressed_mb / original_mb) * 100
-        log(f"Compressed: {original_mb:.1f} MB -> {compressed_mb:.1f} MB ({ratio:.0f}% reduction)")
-        return True
-    else:
-        log(f"Compression failed: {result.stderr.decode()}")
-        return False
-
-
 def upload_to_s3(s3_client, local_file: Path, bucket: str, key: str):
     """Upload file to S3."""
     size_mb = local_file.stat().st_size / 1_000_000
@@ -178,17 +150,9 @@ def main():
 
         pdf_full = Path(result)
 
-        # Step 3: Compress PDF
+        # Step 3: Upload results
         log("=" * 80)
-        log("STEP 3: Compressing PDF")
-        log("=" * 80)
-
-        pdf_compressed = work_dir / "report-compressed.pdf"
-        compress_success = compress_pdf(pdf_full, pdf_compressed)
-
-        # Step 4: Upload results
-        log("=" * 80)
-        log("STEP 4: Uploading PDFs to S3")
+        log("STEP 3: Uploading PDFs to S3")
         log("=" * 80)
 
         # Upload full resolution PDF
@@ -199,22 +163,13 @@ def main():
             f"{user_id}/projects/{project_id}/thermographic-report/report-full.pdf"
         )
 
-        # Upload compressed PDF
-        if compress_success:
-            upload_to_s3(
-                s3_client,
-                pdf_compressed,
-                reports_bucket,
-                f"{user_id}/projects/{project_id}/thermographic-report/report-lowres.pdf"
-            )
-        else:
-            # If compression failed, use full PDF as lowres too
-            upload_to_s3(
-                s3_client,
-                pdf_full,
-                reports_bucket,
-                f"{user_id}/projects/{project_id}/thermographic-report/report-lowres.pdf"
-            )
+        # Preview PDF not available in compile-only mode, use full PDF as fallback
+        upload_to_s3(
+            s3_client,
+            pdf_full,
+            reports_bucket,
+            f"{user_id}/projects/{project_id}/thermographic-report/report-preview.pdf"
+        )
 
         log("=" * 80)
         log("✅ PDF compilation completed successfully")

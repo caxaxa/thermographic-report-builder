@@ -38,7 +38,7 @@ class JobOutput(BaseModel):
     """Output artifacts from the report builder job."""
 
     report_full_pdf_s3: str = Field(description="S3 URI for full-resolution PDF")
-    report_lowres_pdf_s3: str = Field(description="S3 URI for low-resolution PDF")
+    report_preview_pdf_s3: str = Field(description="S3 URI for preview PDF")
     metrics_json_s3: str = Field(description="S3 URI for metrics JSON")
     metrics_csv_s3: str = Field(description="S3 URI for metrics CSV")
     layers_dxf_s3: str | None = Field(default=None, description="S3 URI for DXF layers (optional)")
@@ -53,7 +53,7 @@ class JobOutput(BaseModel):
         return {
             "artifacts": {
                 "report_full_pdf": self.report_full_pdf_s3,
-                "report_lowres_pdf": self.report_lowres_pdf_s3,
+                "report_preview_pdf": self.report_preview_pdf_s3,
                 "metrics_json": self.metrics_json_s3,
                 "metrics_csv": self.metrics_csv_s3,
                 "layers_dxf": self.layers_dxf_s3,

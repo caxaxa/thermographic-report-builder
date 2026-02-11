@@ -1362,8 +1362,7 @@ class GPSMatcher:
 
         if last_error is not None:
             logger.warning(
-                f"Failed to download raw image for source-map match: {image_name}",
-                error=str(last_error),
+                f"Failed to download raw image for source-map match: {image_name}: {last_error}"
             )
         return None
 

@@ -62,7 +62,14 @@ class FlightVisualizationGenerator:
             reconstruction_path = self.work_dir / "opensfm" / "reconstruction.json"
 
         if orthophoto_path is None:
-            orthophoto_path = self.work_dir / "odm_orthophoto.tif"
+            ortho_candidates = [
+                self.work_dir / "odm_orthophoto_original.tif",
+                self.work_dir / "odm_orthophoto.tif",
+            ]
+            orthophoto_path = next(
+                (path for path in ortho_candidates if path.exists()),
+                ortho_candidates[-1],
+            )
 
         # Parse flight data
         logger.info(f"Parsing reconstruction data from {reconstruction_path}")

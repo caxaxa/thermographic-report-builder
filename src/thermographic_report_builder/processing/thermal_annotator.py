@@ -26,7 +26,8 @@ def detect_thermal_palette(image_path: Path) -> str:
     Detect the color palette used in a DJI thermal image.
 
     Reads the EXIF 'Image Description' field which contains the palette name.
-    Common DJI palettes: WhiteHot, BlackHot, Iron, IronRed, Rainbow, Fulgurite, Medical
+    DJI palettes: WhiteHot, BlackHot, Fulgurite, IronRed, HotIron, Medical,
+    Arctic, Rainbow1, Rainbow2, Tint.
 
     Args:
         image_path: Path to DJI thermal R-JPEG image
@@ -51,114 +52,118 @@ def detect_thermal_palette(image_path: Path) -> str:
     return "whitehot"  # Default
 
 
+# DJI Thermal SDK palette LUTs — extracted from libdirp.so via dirp_get_pseudo_color_lut().
+# Each entry is a list of (lut_index, R, G, B) control points. Index 0 = coldest, 255 = hottest.
+_DJI_PALETTE_CONTROL_POINTS = {
+    "whitehot": [
+        (0, 0, 0, 0), (128, 128, 128, 128), (255, 255, 255, 255),
+    ],
+    "blackhot": [
+        (0, 255, 255, 255), (128, 127, 127, 127), (255, 0, 0, 0),
+    ],
+    "fulgurite": [
+        (0, 0, 0, 0), (32, 86, 0, 0), (64, 172, 0, 0), (96, 255, 3, 0),
+        (128, 255, 88, 0), (160, 255, 173, 0), (192, 255, 255, 4),
+        (224, 255, 255, 131), (255, 255, 255, 255),
+    ],
+    "ironred": [
+        (0, 0, 0, 32), (32, 34, 0, 97), (64, 109, 0, 131), (96, 183, 2, 159),
+        (112, 220, 34, 77), (128, 255, 66, 0), (160, 255, 129, 0),
+        (192, 255, 193, 0), (224, 255, 255, 6), (255, 255, 255, 200),
+    ],
+    "hotiron": [
+        (0, 0, 0, 0), (32, 12, 47, 47), (64, 24, 94, 94), (96, 51, 139, 117),
+        (128, 120, 178, 78), (160, 189, 217, 38), (192, 255, 251, 0),
+        (224, 255, 124, 0), (255, 224, 0, 0),
+    ],
+    "medical": [
+        (0, 64, 32, 64), (32, 218, 63, 225), (64, 32, 39, 255),
+        (96, 19, 238, 235), (128, 6, 185, 75), (160, 106, 194, 7),
+        (192, 255, 251, 20), (224, 255, 39, 39), (255, 255, 255, 255),
+    ],
+    "arctic": [
+        (0, 0, 32, 64), (32, 0, 67, 249), (64, 4, 163, 58), (96, 131, 255, 0),
+        (128, 255, 251, 0), (160, 255, 124, 0), (192, 255, 0, 8),
+        (224, 252, 8, 252), (255, 255, 255, 255),
+    ],
+    "rainbow1": [
+        (0, 128, 0, 0), (32, 250, 0, 199), (64, 96, 0, 255), (96, 0, 77, 255),
+        (128, 0, 255, 243), (160, 0, 255, 53), (192, 140, 255, 0),
+        (224, 255, 180, 0), (255, 255, 0, 0),
+    ],
+    "rainbow2": [
+        (0, 0, 0, 131), (32, 0, 3, 255), (64, 0, 131, 255), (96, 3, 255, 251),
+        (128, 131, 255, 123), (160, 255, 251, 0), (192, 255, 123, 0),
+        (224, 251, 0, 0), (255, 127, 0, 0),
+    ],
+    "tint": [
+        (0, 0, 0, 0), (64, 91, 91, 91), (128, 182, 182, 182),
+        (176, 251, 251, 251), (192, 255, 204, 204), (224, 254, 95, 95),
+        (255, 224, 0, 0),
+    ],
+}
+
+# Aliases: DJI EXIF strings map to canonical palette names
+_PALETTE_ALIASES = {
+    "iron": "ironred",
+    "ironbow": "ironred",
+    "iron_red": "ironred",
+    "hot_iron": "hotiron",
+    "rainbow": "rainbow1",
+    "white_hot": "whitehot",
+    "black_hot": "blackhot",
+}
+
+
+def _build_lut_256(palette: str) -> np.ndarray:
+    """Build a full 256x3 RGB LUT by interpolating control points."""
+    key = _PALETTE_ALIASES.get(palette, palette)
+    points = _DJI_PALETTE_CONTROL_POINTS.get(key)
+    if points is None:
+        logger.warning(f"Unknown palette '{palette}', falling back to whitehot")
+        points = _DJI_PALETTE_CONTROL_POINTS["whitehot"]
+
+    indices = np.array([p[0] for p in points], dtype=np.float64)
+    r_vals = np.array([p[1] for p in points], dtype=np.float64)
+    g_vals = np.array([p[2] for p in points], dtype=np.float64)
+    b_vals = np.array([p[3] for p in points], dtype=np.float64)
+
+    x = np.arange(256, dtype=np.float64)
+    lut = np.stack([
+        np.interp(x, indices, r_vals),
+        np.interp(x, indices, g_vals),
+        np.interp(x, indices, b_vals),
+    ], axis=-1).astype(np.uint8)
+    return lut
+
+
 def create_colorbar(
     height: int,
     width: int,
     palette: str = "whitehot",
 ) -> np.ndarray:
     """
-    Create a colorbar image matching the thermal palette.
+    Create a colorbar image matching the DJI thermal palette.
+
+    Uses exact LUT data extracted from the DJI Thermal SDK (libdirp.so).
+    Supports all 10 DJI palettes: WhiteHot, BlackHot, Fulgurite, IronRed,
+    HotIron, Medical, Arctic, Rainbow1, Rainbow2, Tint.
 
     Args:
         height: Height of colorbar in pixels
         width: Width of colorbar in pixels
-        palette: Palette name (whitehot, blackhot, iron, rainbow, fulgurite, medical)
+        palette: Palette name (case-insensitive, underscores optional)
 
     Returns:
         BGR colorbar image (numpy array)
     """
-    colorbar = np.zeros((height, width, 3), dtype=np.uint8)
+    lut = _build_lut_256(palette.lower().strip())
 
-    palette = palette.lower().strip()
-
-    for i in range(height):
-        # ratio goes from 1.0 (top, hot) to 0.0 (bottom, cold)
-        ratio = 1.0 - (i / height)
-
-        if palette == "whitehot":
-            # White = hot, Black = cold (grayscale)
-            gray_value = int(255 * ratio)
-            colorbar[i, :] = (gray_value, gray_value, gray_value)
-
-        elif palette == "blackhot":
-            # Black = hot, White = cold (inverted grayscale)
-            gray_value = int(255 * (1 - ratio))
-            colorbar[i, :] = (gray_value, gray_value, gray_value)
-
-        elif palette in ("iron", "ironbow", "ironred"):
-            # Iron/Ironbow: black -> blue -> purple -> red -> orange -> yellow -> white
-            if ratio < 0.15:
-                # Black to blue
-                t = ratio / 0.15
-                colorbar[i, :] = (int(128 * t), 0, 0)  # BGR
-            elif ratio < 0.30:
-                # Blue to purple
-                t = (ratio - 0.15) / 0.15
-                colorbar[i, :] = (128 + int(50 * t), 0, int(80 * t))
-            elif ratio < 0.50:
-                # Purple to red
-                t = (ratio - 0.30) / 0.20
-                colorbar[i, :] = (int(178 * (1 - t)), 0, int(80 + 175 * t))
-            elif ratio < 0.70:
-                # Red to orange
-                t = (ratio - 0.50) / 0.20
-                colorbar[i, :] = (0, int(100 * t), 255)
-            elif ratio < 0.85:
-                # Orange to yellow
-                t = (ratio - 0.70) / 0.15
-                colorbar[i, :] = (0, int(100 + 155 * t), 255)
-            else:
-                # Yellow to white
-                t = (ratio - 0.85) / 0.15
-                colorbar[i, :] = (int(255 * t), 255, 255)
-
-        elif palette == "rainbow":
-            # Rainbow: blue -> cyan -> green -> yellow -> red
-            if ratio < 0.25:
-                t = ratio / 0.25
-                colorbar[i, :] = (255, int(255 * t), 0)  # Blue to cyan
-            elif ratio < 0.50:
-                t = (ratio - 0.25) / 0.25
-                colorbar[i, :] = (int(255 * (1 - t)), 255, 0)  # Cyan to green
-            elif ratio < 0.75:
-                t = (ratio - 0.50) / 0.25
-                colorbar[i, :] = (0, 255, int(255 * t))  # Green to yellow
-            else:
-                t = (ratio - 0.75) / 0.25
-                colorbar[i, :] = (0, int(255 * (1 - t)), 255)  # Yellow to red
-
-        elif palette == "fulgurite":
-            # Fulgurite: dark blue -> light blue -> white -> yellow -> orange
-            if ratio < 0.25:
-                t = ratio / 0.25
-                colorbar[i, :] = (int(100 + 100 * t), int(50 * t), int(50 * t))
-            elif ratio < 0.50:
-                t = (ratio - 0.25) / 0.25
-                colorbar[i, :] = (int(200 + 55 * t), int(50 + 150 * t), int(50 + 150 * t))
-            elif ratio < 0.75:
-                t = (ratio - 0.50) / 0.25
-                colorbar[i, :] = (int(255 * (1 - t * 0.5)), 255, int(200 + 55 * t))
-            else:
-                t = (ratio - 0.75) / 0.25
-                colorbar[i, :] = (0, int(255 * (1 - t * 0.5)), 255)
-
-        elif palette == "medical":
-            # Medical: blue to red through green/yellow
-            if ratio < 0.33:
-                t = ratio / 0.33
-                colorbar[i, :] = (255, int(255 * t), 0)  # Blue to cyan
-            elif ratio < 0.66:
-                t = (ratio - 0.33) / 0.33
-                colorbar[i, :] = (int(255 * (1 - t)), 255, int(255 * t))  # Cyan through green to yellow
-            else:
-                t = (ratio - 0.66) / 0.34
-                colorbar[i, :] = (0, int(255 * (1 - t)), 255)  # Yellow to red
-
-        else:
-            # Unknown palette - default to whitehot
-            gray_value = int(255 * ratio)
-            colorbar[i, :] = (gray_value, gray_value, gray_value)
-
+    # Map each row to a LUT index: top = hot (255), bottom = cold (0)
+    row_indices = np.linspace(255, 0, height).astype(np.uint8)
+    # RGB LUT → BGR for OpenCV
+    bgr_lut = lut[row_indices][:, ::-1]
+    colorbar = np.tile(bgr_lut[:, np.newaxis, :], (1, width, 1))
     return colorbar
 
 

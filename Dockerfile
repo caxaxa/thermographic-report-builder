@@ -29,8 +29,9 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Core LaTeX
     texlive-latex-base \
-    # Portuguese support (babel-brazil)
+    # Portuguese and English support (babel-brazil, babel-english)
     texlive-lang-portuguese \
+    texlive-lang-english \
     # Additional packages: geometry, fancyhdr, subfig, booktabs, xcolor, tikz
     texlive-latex-extra \
     # Fonts: lmodern, etc.
