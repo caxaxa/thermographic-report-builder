@@ -1208,10 +1208,7 @@ class GPSMatcher:
             # Rotate if flying south (same as main image)
             if flight_dir == "south":
                 img = cv2.rotate(img, cv2.ROTATE_180)
-                # Also transform coordinates for rotated image
-                img_h, img_w = img.shape[:2]
-                hot_point_x = img_w - hot_point_x
-                hot_point_y = img_h - hot_point_y
+                # Coordinates are already in rotated space from find_hot_cold_points()
 
             # Calculate zoom box bounds (same as thermal_annotator)
             half_size = zoom_size // 2
