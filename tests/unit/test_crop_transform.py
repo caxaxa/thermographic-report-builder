@@ -4,28 +4,68 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 SRC_ROOT = Path(__file__).resolve().parents[2] / "src"
 MODULE_PATH = SRC_ROOT / "thermographic_report_builder" / "processing" / "crop_transform.py"
 
-sys.path.insert(0, str(SRC_ROOT))
 
-package = types.ModuleType("thermographic_report_builder")
-package.__path__ = [str(SRC_ROOT / "thermographic_report_builder")]
-sys.modules.setdefault("thermographic_report_builder", package)
+@pytest.fixture()
+def crop_transform_module():
+    """Import crop_transform.py in isolation without polluting sys.modules.
 
-processing_pkg = types.ModuleType("thermographic_report_builder.processing")
-processing_pkg.__path__ = [str(SRC_ROOT / "thermographic_report_builder" / "processing")]
-sys.modules.setdefault("thermographic_report_builder.processing", processing_pkg)
+    crop_transform.py has a relative import (..utils.logger), so we need
+    parent packages in sys.modules. We save/restore module state to avoid
+    leaving broken stubs that block later imports of the full processing package.
+    """
+    saved = {}
+    stub_keys = [
+        "thermographic_report_builder",
+        "thermographic_report_builder.processing",
+        "thermographic_report_builder.utils",
+        "thermographic_report_builder.utils.logger",
+    ]
+    for key in stub_keys:
+        if key in sys.modules:
+            saved[key] = sys.modules[key]
 
-spec = importlib.util.spec_from_file_location(
-    "thermographic_report_builder.processing.crop_transform", MODULE_PATH
-)
-crop_transform = importlib.util.module_from_spec(spec)
-assert spec and spec.loader
-spec.loader.exec_module(crop_transform)
+    # Create minimal parent stubs for relative import resolution
+    pkg = types.ModuleType("thermographic_report_builder")
+    pkg.__path__ = [str(SRC_ROOT / "thermographic_report_builder")]
+    sys.modules.setdefault("thermographic_report_builder", pkg)
 
-CropTransform = crop_transform.CropTransform
-CropTransformParams = crop_transform.CropTransformParams
+    proc_pkg = types.ModuleType("thermographic_report_builder.processing")
+    proc_pkg.__path__ = [str(SRC_ROOT / "thermographic_report_builder" / "processing")]
+    sys.modules.setdefault("thermographic_report_builder.processing", proc_pkg)
+
+    # Also need utils.logger for the relative import in crop_transform.py
+    utils_pkg = types.ModuleType("thermographic_report_builder.utils")
+    utils_pkg.__path__ = [str(SRC_ROOT / "thermographic_report_builder" / "utils")]
+    sys.modules.setdefault("thermographic_report_builder.utils", utils_pkg)
+
+    logger_spec = importlib.util.spec_from_file_location(
+        "thermographic_report_builder.utils.logger",
+        SRC_ROOT / "thermographic_report_builder" / "utils" / "logger.py",
+    )
+    logger_mod = importlib.util.module_from_spec(logger_spec)
+    sys.modules.setdefault("thermographic_report_builder.utils.logger", logger_mod)
+    logger_spec.loader.exec_module(logger_mod)
+
+    spec = importlib.util.spec_from_file_location(
+        "thermographic_report_builder.processing.crop_transform", MODULE_PATH
+    )
+    mod = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(mod)
+
+    yield mod
+
+    # Restore original sys.modules state — remove stubs we added
+    for key in stub_keys:
+        if key in saved:
+            sys.modules[key] = saved[key]
+        else:
+            sys.modules.pop(key, None)
 
 
 def _rotate_point_screen(x, y, width, height, angle_deg):
@@ -47,14 +87,17 @@ def _rotate_point_screen(x, y, width, height, angle_deg):
     return rx + rcx, ry + rcy, rot_w, rot_h
 
 
-def _make_transform(params):
+def _make_transform(CropTransform, params):
     transform = CropTransform()
     transform.params = params
     transform.available = True
     return transform
 
 
-def test_cropped_to_uncropped_no_rotation():
+def test_cropped_to_uncropped_no_rotation(crop_transform_module):
+    CropTransform = crop_transform_module.CropTransform
+    CropTransformParams = crop_transform_module.CropTransformParams
+
     params = CropTransformParams(
         crop_x_min=100,
         crop_y_min=200,
@@ -65,7 +108,7 @@ def test_cropped_to_uncropped_no_rotation():
         cropped_rotated_height=800,
         resample_scale=2.0,
     )
-    transform = _make_transform(params)
+    transform = _make_transform(CropTransform, params)
 
     uncropped_x, uncropped_y = transform.cropped_to_uncropped(200.0, 400.0)
 
@@ -74,7 +117,10 @@ def test_cropped_to_uncropped_no_rotation():
     assert abs(uncropped_y - 400.0) < 1e-6
 
 
-def test_cropped_to_uncropped_roundtrip_rotation():
+def test_cropped_to_uncropped_roundtrip_rotation(crop_transform_module):
+    CropTransform = crop_transform_module.CropTransform
+    CropTransformParams = crop_transform_module.CropTransformParams
+
     width, height = 400, 300
     angle = 27.0
     x, y = 123.4, 210.7
@@ -93,7 +139,7 @@ def test_cropped_to_uncropped_roundtrip_rotation():
         cropped_rotated_height=rot_h,
         resample_scale=1.0,
     )
-    transform = _make_transform(params)
+    transform = _make_transform(CropTransform, params)
 
     uncropped_x, uncropped_y = transform.cropped_to_uncropped(rotated_x, rotated_y)
 

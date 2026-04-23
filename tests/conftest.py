@@ -2,6 +2,12 @@
 import os
 import pytest
 
+# Set env vars at module level so Settings() can instantiate during collection.
+# The autouse fixture below re-applies them per-test via monkeypatch for clean isolation.
+os.environ.setdefault("SOLAR_PROJECT_ID", "test-project-001")
+os.environ.setdefault("SOLAR_USER_ID", "test-user-001")
+os.environ.setdefault("ENVIRONMENT", "test")
+
 
 @pytest.fixture(autouse=True)
 def set_required_env(monkeypatch):
