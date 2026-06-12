@@ -2,6 +2,7 @@
 
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .config import settings
@@ -173,12 +174,32 @@ def main() -> int:
 
         s3_client = S3Client()
 
-        # Download orthophoto - prefer resampled (1.6cm) which is ALREADY cropped/rotated
-        # by the inference pipeline. This matches the defect label coordinate space.
-        visualization_ortho_path, ortho_version = s3_client.download_orthophoto_resampled(
-            work_dir / "odm_orthophoto.tif",
-            prefer_resampled=True
-        )
+        # Download both orthophotos in parallel - they are different files:
+        # - resampled/cropped odm_orthophoto_1.6cm.tif (visualization, matches
+        #   defect label coordinate space)
+        # - original uncropped odm_orthophoto.tif (mesh backtracking space)
+        uncropped_ortho_dest = work_dir / "odm_orthophoto_original.tif"
+        with ThreadPoolExecutor(max_workers=2) as ortho_executor:
+            # Prefer resampled (1.6cm) which is ALREADY cropped/rotated
+            # by the inference pipeline. This matches the defect label coordinate space.
+            viz_ortho_future = ortho_executor.submit(
+                s3_client.download_orthophoto_resampled,
+                work_dir / "odm_orthophoto.tif",
+                prefer_resampled=True,
+            )
+            uncropped_ortho_future = ortho_executor.submit(
+                s3_client.download_orthophoto, uncropped_ortho_dest
+            )
+
+            visualization_ortho_path, ortho_version = viz_ortho_future.result()
+
+            # Graceful degradation: the uncropped original is optional
+            # (mesh backtracking only) - failure must not abort the pipeline.
+            uncropped_ortho_error: Exception | None = None
+            try:
+                uncropped_ortho_future.result()
+            except Exception as e:
+                uncropped_ortho_error = e
         logger.info(f"Using orthophoto version: {ortho_version}")
 
         labels_path = s3_client.download_defect_labels(work_dir / "defect_labels.json")
@@ -235,16 +256,16 @@ def main() -> int:
         logger.info(f"Visualization orthophoto: {img_w}x{img_h} pixels (already cropped/rotated)")
         logger.info(f"Labels: {len(defect_labels.get_defects())} defects, {len(defect_labels.get_panels())} panels")
 
-        # Download ORIGINAL uncropped orthophoto for mesh backtracking
+        # ORIGINAL uncropped orthophoto for mesh backtracking (downloaded in
+        # parallel with the visualization ortho in STEP 1).
         # The mesh and geo-transform are in the uncropped coordinate space
-        uncropped_ortho_path = work_dir / "odm_orthophoto_original.tif"
+        uncropped_ortho_path = uncropped_ortho_dest
         has_original_ortho = False
-        try:
-            s3_client.download_orthophoto(uncropped_ortho_path)
+        if uncropped_ortho_error is None:
             has_original_ortho = True
             logger.info("Downloaded original uncropped orthophoto for mesh backtracking")
-        except Exception as e:
-            logger.warning(f"Failed to download original orthophoto: {e}")
+        else:
+            logger.warning(f"Failed to download original orthophoto: {uncropped_ortho_error}")
             uncropped_ortho_path = visualization_ortho_path  # Fall back
 
         # Get uncropped dimensions and geo-transform for mesh backtracking

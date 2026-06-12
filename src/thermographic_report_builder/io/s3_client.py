@@ -3,6 +3,7 @@
 import boto3
 from pathlib import Path
 from typing import BinaryIO
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from ..config import settings
@@ -23,7 +24,17 @@ class S3Client:
             region: AWS region (defaults to settings.aws_region)
         """
         self.region = region or settings.aws_region
-        self.s3 = boto3.client("s3", region_name=self.region)
+        # Explicit timeouts + bounded retries prevent thundering-herd hangs
+        # when many downloads run concurrently (e.g. parallel raw-image indexing).
+        self.s3 = boto3.client(
+            "s3",
+            region_name=self.region,
+            config=Config(
+                connect_timeout=10,
+                read_timeout=60,
+                retries={"max_attempts": 3},
+            ),
+        )
         logger.info(f"Initialized S3 client for region {self.region}")
 
     def download_orthophoto(self, local_path: Path) -> Path:

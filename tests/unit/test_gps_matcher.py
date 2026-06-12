@@ -368,3 +368,93 @@ class TestDefectMatch:
         )
         assert match.pixel_x == 320.5
         assert match.pixel_y == 256.3
+
+
+# ---------------------------------------------------------------------------
+# _index_raw_images (two-phase: sync detection + parallel downloads)
+# ---------------------------------------------------------------------------
+
+class TestIndexRawImages:
+    """Tests for the two-phase (sync first image + parallel rest) indexing."""
+
+    @staticmethod
+    def _make_matcher(keys, fail_names=frozenset()):
+        s3 = MagicMock()
+        s3.list_raw_images.return_value = keys
+
+        def fake_download(s3_key, local_path):
+            if Path(s3_key).name in fail_names:
+                raise RuntimeError("simulated download failure")
+            return local_path
+
+        s3.download_raw_image.side_effect = fake_download
+        return _stub_gps_matcher(
+            s3_client=s3,
+            _detected_image_width=None,
+            _detected_image_height=None,
+            _thermal_only_images=False,
+            _use_gps_fallback=False,
+        )
+
+    @staticmethod
+    def _exif_for(name, idx):
+        return {
+            "has_gps": True,
+            "latitude": -15.0 - idx * 0.0001,
+            "longitude": -47.0,
+            "width": 640,
+            "height": 512,
+            "filename": name,
+        }
+
+    def test_indexes_all_images_and_detects_dimensions(self, tmp_path):
+        keys = [f"user/projects/proj/images/DJI_{i:03d}_T.JPG" for i in range(12)]
+        matcher = self._make_matcher(keys)
+
+        def fake_exif(path):
+            return None, self._exif_for(path.name, int(path.name[4:7]))
+
+        with patch(
+            "thermographic_report_builder.processing.gps_matcher.load_raw_image_with_exif",
+            side_effect=fake_exif,
+        ):
+            matcher._index_raw_images(tmp_path)
+
+        assert len(matcher.image_cache) == 12
+        # First-image detection ran (sync phase)
+        assert matcher._detected_image_width == 640
+        assert matcher._detected_image_height == 512
+        assert matcher._thermal_only_images is True
+
+    def test_single_bad_image_does_not_poison_run(self, tmp_path):
+        keys = [f"user/projects/proj/images/DJI_{i:03d}_T.JPG" for i in range(10)]
+        matcher = self._make_matcher(keys, fail_names={"DJI_005_T.JPG"})
+
+        def fake_exif(path):
+            return None, self._exif_for(path.name, int(path.name[4:7]))
+
+        with patch(
+            "thermographic_report_builder.processing.gps_matcher.load_raw_image_with_exif",
+            side_effect=fake_exif,
+        ):
+            matcher._index_raw_images(tmp_path)
+
+        assert len(matcher.image_cache) == 9
+        assert "DJI_005_T.JPG" not in matcher.image_cache
+
+    def test_detection_survives_first_image_failure(self, tmp_path):
+        """If image 1 fails, the sync phase continues until detection runs."""
+        keys = [f"user/projects/proj/images/DJI_{i:03d}_T.JPG" for i in range(5)]
+        matcher = self._make_matcher(keys, fail_names={"DJI_000_T.JPG"})
+
+        def fake_exif(path):
+            return None, self._exif_for(path.name, int(path.name[4:7]))
+
+        with patch(
+            "thermographic_report_builder.processing.gps_matcher.load_raw_image_with_exif",
+            side_effect=fake_exif,
+        ):
+            matcher._index_raw_images(tmp_path)
+
+        assert matcher._detected_image_width == 640
+        assert len(matcher.image_cache) == 4

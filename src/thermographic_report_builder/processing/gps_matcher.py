@@ -22,6 +22,7 @@ Coordinate spaces:
 
 import csv
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import cv2
 import json
 import numpy as np
@@ -1258,76 +1259,133 @@ class GPSMatcher:
             logger.warning(f"Failed to create annotated raw image for {panel_id}: {e}")
 
     def _index_raw_images(self, temp_dir: Path) -> None:
-        """Download and index all raw images with GPS data."""
+        """Download and index all raw images with GPS data.
+
+        Two-phase strategy:
+        1. Process images synchronously until the first-image detection block
+           has run (normally just the first image). The detection block writes
+           ``_detected_image_width/_height``, ``_thermal_only_images`` and
+           ``_use_gps_fallback`` — naive parallelization would race on these.
+        2. Process the remaining images in parallel with a thread pool.
+           ``image_cache`` writes are dict-key-disjoint (filename keys), so
+           they are safe under the GIL.
+        """
         logger.info("Indexing raw thermal images")
 
         raw_image_keys = self.s3_client.list_raw_images()
+        total = len(raw_image_keys)
 
-        for idx, s3_key in enumerate(raw_image_keys, 1):
-            filename = Path(s3_key).name
-            local_path = temp_dir / filename
+        # Phase 1: synchronous until first-image detection has completed
+        sync_count = 0
+        for s3_key in raw_image_keys:
+            sync_count += 1
+            self._index_single_raw_image(s3_key, temp_dir, run_detection=True)
+            if self._detected_image_width is not None:
+                break
 
-            try:
-                # Download image
-                self.s3_client.download_raw_image(s3_key, local_path)
+        # Phase 2: parallel downloads for the remaining images.
+        # max_workers=8 matches boto3's default transfer max_concurrency;
+        # more workers just inflate peak /tmp usage (~50MB per in-flight
+        # image → 8×50MB = 400MB peak, within the 512MB Lambda /tmp limit).
+        remaining_keys = raw_image_keys[sync_count:]
+        completed = sync_count
+        if remaining_keys:
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                futures = [
+                    executor.submit(
+                        self._index_single_raw_image, s3_key, temp_dir, False
+                    )
+                    for s3_key in remaining_keys
+                ]
+                for future in as_completed(futures):
+                    future.result()  # per-image errors are handled in the worker
+                    completed += 1
 
-                # Load and extract GPS
-                _, exif = load_raw_image_with_exif(local_path)
-
-                if exif.get("has_gps") and "latitude" in exif and "longitude" in exif:
-                    self.image_cache[filename] = exif
-                    logger.debug(f"Indexed {filename}: GPS ({exif['latitude']}, {exif['longitude']})")
-
-                    # Detect image dimensions on first image to identify thermal-only cameras
-                    if self._detected_image_width is None and "width" in exif and "height" in exif:
-                        self._detected_image_width = exif["width"]
-                        self._detected_image_height = exif["height"]
-
-                        # M30T images are 1280x1024, thermal-only are typically 640x512
-                        if self._detected_image_width != 1280 or self._detected_image_height != 1024:
-                            self._thermal_only_images = True
-                            logger.info(
-                                f"Detected thermal-only images ({self._detected_image_width}x{self._detected_image_height}). "
-                                f"Using thermal-only alignment."
-                            )
-                        else:
-                            logger.info(
-                                f"Detected M30T images ({self._detected_image_width}x{self._detected_image_height})."
-                            )
-
-                        # Disable reprojection only if reconstruction camera size mismatches raw images
-                        if self.camera_projector.available:
-                            camera_model = next(iter(getattr(self.camera_projector, "cameras", {}).values()), {})
-                            cam_width = camera_model.get("width")
-                            cam_height = camera_model.get("height")
-
-                            if cam_width and cam_height:
-                                if cam_width != self._detected_image_width or cam_height != self._detected_image_height:
-                                    self._use_gps_fallback = True
-                                    logger.warning(
-                                        "Reprojection disabled due to size mismatch: "
-                                        f"reconstruction {cam_width}x{cam_height} vs raw "
-                                        f"{self._detected_image_width}x{self._detected_image_height}. "
-                                        "Using GPS-only matching."
-                                    )
-                                else:
-                                    logger.info(
-                                        "Reprojection enabled: reconstruction camera size matches raw images."
-                                    )
-                            else:
-                                logger.info(
-                                    "Reprojection enabled: reconstruction camera dimensions unavailable for validation."
-                                )
-
-            except Exception as e:
-                logger.warning(f"Failed to process {filename}: {e}")
-                continue
-
-            # Log progress every 50 images
-            if idx % 50 == 0:
-                logger.info(f"Indexed {idx}/{len(raw_image_keys)} images ({len(self.image_cache)} with GPS)")
+                    # Log progress every 50 images
+                    if completed % 50 == 0:
+                        logger.info(
+                            f"Indexed {completed}/{total} images ({len(self.image_cache)} with GPS)"
+                        )
 
         logger.info(f"Indexed {len(self.image_cache)} images with GPS data")
+
+    def _index_single_raw_image(
+        self, s3_key: str, temp_dir: Path, run_detection: bool = False
+    ) -> None:
+        """Download one raw image and index its EXIF GPS data.
+
+        Errors are logged and swallowed (mirrors the original per-image
+        try/except ... continue) so one bad image doesn't poison the run.
+
+        Args:
+            s3_key: S3 key of the raw image
+            temp_dir: Local directory to download into
+            run_detection: Run the first-image dimension detection block.
+                Must only be True when called synchronously (the block writes
+                shared state that is not thread-safe).
+        """
+        filename = Path(s3_key).name
+        local_path = temp_dir / filename
+
+        try:
+            # Download image
+            self.s3_client.download_raw_image(s3_key, local_path)
+
+            # Load and extract GPS
+            _, exif = load_raw_image_with_exif(local_path)
+
+            if exif.get("has_gps") and "latitude" in exif and "longitude" in exif:
+                self.image_cache[filename] = exif
+                logger.debug(f"Indexed {filename}: GPS ({exif['latitude']}, {exif['longitude']})")
+
+                # Detect image dimensions on first image to identify thermal-only cameras
+                if (
+                    run_detection
+                    and self._detected_image_width is None
+                    and "width" in exif
+                    and "height" in exif
+                ):
+                    self._detected_image_width = exif["width"]
+                    self._detected_image_height = exif["height"]
+
+                    # M30T images are 1280x1024, thermal-only are typically 640x512
+                    if self._detected_image_width != 1280 or self._detected_image_height != 1024:
+                        self._thermal_only_images = True
+                        logger.info(
+                            f"Detected thermal-only images ({self._detected_image_width}x{self._detected_image_height}). "
+                            f"Using thermal-only alignment."
+                        )
+                    else:
+                        logger.info(
+                            f"Detected M30T images ({self._detected_image_width}x{self._detected_image_height})."
+                        )
+
+                    # Disable reprojection only if reconstruction camera size mismatches raw images
+                    if self.camera_projector.available:
+                        camera_model = next(iter(getattr(self.camera_projector, "cameras", {}).values()), {})
+                        cam_width = camera_model.get("width")
+                        cam_height = camera_model.get("height")
+
+                        if cam_width and cam_height:
+                            if cam_width != self._detected_image_width or cam_height != self._detected_image_height:
+                                self._use_gps_fallback = True
+                                logger.warning(
+                                    "Reprojection disabled due to size mismatch: "
+                                    f"reconstruction {cam_width}x{cam_height} vs raw "
+                                    f"{self._detected_image_width}x{self._detected_image_height}. "
+                                    "Using GPS-only matching."
+                                )
+                            else:
+                                logger.info(
+                                    "Reprojection enabled: reconstruction camera size matches raw images."
+                                )
+                        else:
+                            logger.info(
+                                "Reprojection enabled: reconstruction camera dimensions unavailable for validation."
+                            )
+
+        except Exception as e:
+            logger.warning(f"Failed to process {filename}: {e}")
 
     def _ensure_raw_image_downloaded(self, image_name: str, temp_dir: Path) -> Optional[Path]:
         """Attempt to download a missing raw image by filename."""
