@@ -1,37 +1,24 @@
-"""Custom exception classes for error handling."""
+"""Custom exception classes for error handling.
 
+The ``ProcessingError`` hierarchy now lives in the shared ``solar_report_utils``
+library; this module re-exports it so existing
+``from ...utils.exceptions import X`` call sites keep working.
+"""
 
-class ProcessingError(Exception):
-    """Base exception for all processing errors."""
+from solar_report_utils import (
+    ImageProcessingError,
+    InvalidInputError,
+    ProcessingError,
+    ReportGenerationError,
+    S3DownloadError,
+    S3UploadError,
+)
 
-    pass
-
-
-class S3DownloadError(ProcessingError):
-    """Error downloading files from S3."""
-
-    pass
-
-
-class S3UploadError(ProcessingError):
-    """Error uploading files to S3."""
-
-    pass
-
-
-class ImageProcessingError(ProcessingError):
-    """Error during image processing operations."""
-
-    pass
-
-
-class ReportGenerationError(ProcessingError):
-    """Error during report generation."""
-
-    pass
-
-
-class InvalidInputError(ProcessingError):
-    """Invalid input data or parameters."""
-
-    pass
+__all__ = [
+    "ProcessingError",
+    "S3DownloadError",
+    "S3UploadError",
+    "ImageProcessingError",
+    "ReportGenerationError",
+    "InvalidInputError",
+]

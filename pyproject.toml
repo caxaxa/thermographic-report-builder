@@ -13,6 +13,9 @@ authors = [
 ]
 
 dependencies = [
+    # Shared building blocks (exceptions, logging, settings base, S3 client)
+    "solar-report-utils @ git+https://github.com/caxaxa/solar-report-utils.git@96a66cfb0a84c07d4cf655dfa3ab235eda98f0a2",
+
     # Core dependencies
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
@@ -45,8 +48,8 @@ dependencies = [
     # Note: thermal_parser is installed from GitHub in Dockerfile
     # for DJI/FLIR radiometric temperature extraction
 
-    # Utilities
-    "python-json-logger>=2.0.0",
+    # Note: python-json-logger is provided transitively by solar-report-utils,
+    # which owns the structured-logging setup the builder re-exports.
 ]
 
 [project.optional-dependencies]

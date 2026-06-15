@@ -1,17 +1,12 @@
 """Application settings loaded from environment variables."""
 
 import os
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
-
-def get_bucket_suffix() -> str:
-    """Get bucket suffix based on ENVIRONMENT variable."""
-    env = os.getenv('ENVIRONMENT', 'prod').lower()
-    return 'dev' if env == 'dev' else 'prod'
+from solar_report_utils import BaseReportSettings, get_bucket_suffix
 
 
-class Settings(BaseSettings):
+class Settings(BaseReportSettings):
     """
     Application configuration loaded from environment variables.
 
@@ -19,16 +14,12 @@ class Settings(BaseSettings):
     For example: SOLAR_PROJECT_ID=abc123
     """
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_prefix="SOLAR_",
-        case_sensitive=False,
-        extra="ignore",
-    )
+    # model_config (env_file/env_prefix/case_sensitive/extra) and the
+    # ``aws_region`` default are inherited from BaseReportSettings, which is
+    # byte-identical to the previous local definitions.
 
     # ===== AWS Configuration =====
     # Bucket names are determined by ENVIRONMENT variable (dev/prod)
-    aws_region: str = "us-east-2"
     orthos_bucket: str = f"solar-orthos-{get_bucket_suffix()}"
     uploads_bucket: str = f"solar-uploads-{get_bucket_suffix()}"
     reports_bucket: str = f"solar-reports-{get_bucket_suffix()}"

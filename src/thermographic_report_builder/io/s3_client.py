@@ -1,10 +1,10 @@
 """S3 client abstraction for downloading and uploading files."""
 
-import boto3
+import boto3  # noqa: F401 - re-exported so existing test patch targets resolve
 from pathlib import Path
-from typing import BinaryIO
-from botocore.config import Config
 from botocore.exceptions import ClientError
+
+from solar_report_utils import BaseS3Client
 
 from ..config import settings
 from ..utils.logger import get_logger
@@ -13,8 +13,13 @@ from ..utils.exceptions import S3DownloadError, S3UploadError
 logger = get_logger(__name__)
 
 
-class S3Client:
-    """Abstraction for S3 operations."""
+class S3Client(BaseS3Client):
+    """Abstraction for S3 operations.
+
+    Subclasses ``BaseS3Client`` (shared boto3 setup with timeouts + bounded
+    retries, exposing ``self.s3`` and ``self.region``) and adds the
+    thermographic-specific download/upload methods on top.
+    """
 
     def __init__(self, region: str | None = None):
         """
@@ -23,19 +28,9 @@ class S3Client:
         Args:
             region: AWS region (defaults to settings.aws_region)
         """
-        self.region = region or settings.aws_region
-        # Explicit timeouts + bounded retries prevent thundering-herd hangs
-        # when many downloads run concurrently (e.g. parallel raw-image indexing).
-        self.s3 = boto3.client(
-            "s3",
-            region_name=self.region,
-            config=Config(
-                connect_timeout=10,
-                read_timeout=60,
-                retries={"max_attempts": 3},
-            ),
-        )
-        logger.info(f"Initialized S3 client for region {self.region}")
+        # The base sets self.s3 + self.region using the same boto3 Config
+        # (connect_timeout=10, read_timeout=60, max_attempts=3) used previously.
+        super().__init__(region=region or settings.aws_region)
 
     def download_orthophoto(self, local_path: Path) -> Path:
         """
@@ -226,7 +221,9 @@ class S3Client:
             logger.error(error_msg)
             raise S3UploadError(error_msg) from e
 
-    def upload_file(self, local_path: Path, s3_key: str, bucket: str | None = None) -> str:
+    def upload_file(  # type: ignore[override]  # intentional domain-specific signature
+        self, local_path: Path, s3_key: str, bucket: str | None = None
+    ) -> str:
         """
         Upload any file to S3 with custom key.
 
