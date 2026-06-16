@@ -50,6 +50,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # GDAL for flight visualization (GeoTIFF parsing)
     gdal-bin \
     libgdal36 \
+    # git is needed to resolve the solar-report-utils git+https dependency
+    # when pip installs the package wheels in this runtime stage
+    git \
     && mktexlsr \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
