@@ -68,8 +68,11 @@ WORKDIR /app
 COPY --from=builder /build/wheels /tmp/wheels
 # Remove numpy 2.4+ wheels (opencv-python requires numpy<2.3.0)
 RUN rm -f /tmp/wheels/numpy-2.[4-9]*.whl 2>/dev/null || true
+# --no-deps: /tmp/wheels already holds the full dependency tree (built by
+# `pip wheel .`). Without it, pip rejects the local solar_report_utils wheel
+# because the package metadata pins it as a git+https direct URL.
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir /tmp/wheels/*.whl && \
+    pip install --no-cache-dir --no-deps /tmp/wheels/*.whl && \
     rm -rf /tmp/wheels
 
 # Copy DJI Thermal SDK plugins from thermal_parser repo
@@ -84,8 +87,8 @@ RUN sed -i 's/dji_thermal_sdk_v1.7_20241205/dji_thermal_sdk_v1.4_20220929/g' /us
 COPY --chown=appuser:appuser src/ /app/src/
 COPY --chown=appuser:appuser pyproject.toml README.md /app/
 
-# Install package in editable mode
-RUN pip install --no-cache-dir -e .
+# Install package in editable mode (deps already installed from wheels above)
+RUN pip install --no-cache-dir --no-deps -e .
 
 # Create assets directory for logo images
 RUN mkdir -p /app/assets && chown -R appuser:appuser /app
