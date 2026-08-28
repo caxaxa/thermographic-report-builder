@@ -227,6 +227,7 @@ class ReportBuilder:
         doc.packages.append(pl.Package("fancyhdr"))
         doc.packages.append(pl.Package("geometry"))
         doc.packages.append(pl.Package("booktabs"))
+        doc.packages.append(pl.Package("float"))  # [H] placement used by flight appendix
 
         # Additional packages for fancy cover and appendix
         doc.packages.append(pl.Package("calc"))
