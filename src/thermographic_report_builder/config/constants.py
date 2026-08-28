@@ -217,6 +217,92 @@ TITLE_PAGE_TEXTS = {
 }
 
 
+CAPACITY_TEXTS = {
+    "pt-BR": {
+        "title": "Resumo de Capacidade Afetada",
+        "intro": (
+            "Esta se\\c{c}\\~ao consolida as quantidades f\\'isicas verific\\'aveis da "
+            "inspe\\c{c}\\~ao: m\\'odulos comprometidos, capacidade DC afetada e a "
+            "classifica\\c{c}\\~ao de severidade t\\'ermica de cada anomalia. Todos os "
+            "valores s\\~ao rastre\\'aveis \\`as detec\\c{c}\\~oes e \\`as imagens "
+            "originais que as evidenciam."
+        ),
+        "headline": "{compromised} de {total} m\\'odulos comprometidos ({pct}\\%) --- "
+        "aproximadamente {kwp} kWp de capacidade DC afetada (base {wp} Wp/m\\'odulo).",
+        "class_table_caption": "Capacidade afetada por classe de defeito",
+        "col_class": "Classe de defeito",
+        "col_panels": "M\\'odulos",
+        "col_kwp": "kWp afetados",
+        "severity_para": "Distribui\\c{c}\\~ao de severidade t\\'ermica ($\\Delta$T, conforme pr\\'atica IEC TS 62446-3): {breakdown}. Maior $\\Delta$T registrado: {max_dt}$^{{\\circ}}$C.",
+        "severity_critical": "cr\\'itica",
+        "severity_attention": "aten\\c{c}\\~ao",
+        "severity_monitoring": "monitoramento",
+        "priority_caption": "Plano de manuten\\c{c}\\~ao --- prioriza\\c{c}\\~ao por severidade (top {n})",
+        "col_panel": "Painel",
+        "col_defect": "Defeito",
+        "col_dt": "$\\Delta$T ($^{{\\circ}}$C)",
+        "col_severity": "Severidade",
+        "dependencies_para": (
+            "\\textbf{Sobre impacto financeiro e planejamento de manuten\\c{c}\\~ao:} "
+            "a convers\\~ao das quantidades acima em perda de receita ou em cronograma "
+            "de reparo depende de fatores espec\\'ificos do ativo que n\\~ao s\\~ao "
+            "observ\\'aveis pela inspe\\c{c}\\~ao a\\'erea: os termos e pre\\c{c}os do "
+            "PPA ou tarifa contratada; a rela\\c{c}\\~ao de sobredimensionamento DC/AC "
+            "(em usinas com clipping, parte das perdas DC pode n\\~ao se converter em "
+            "perda de energia); a tecnologia, pot\\^encia nominal e estado de "
+            "degrada\\c{c}\\~ao dos m\\'odulos; a topologia de strings e inversores; a "
+            "sazonalidade de irradia\\c{c}\\~ao; e os termos de garantia e seguro. Por "
+            "esse motivo, este relat\\'orio apresenta apenas grandezas f\\'isicas "
+            "verific\\'aveis. An\\'alise financeira espec\\'ifica do ativo, combinando "
+            "estes dados com os par\\^ametros comerciais da usina, pode ser elaborada "
+            "sob consulta."
+        ),
+    },
+    "en-US": {
+        "title": "Affected Capacity Summary",
+        "intro": (
+            "This section consolidates the verifiable physical quantities of the "
+            "inspection: compromised modules, affected DC capacity and the thermal "
+            "severity classification of each anomaly. Every figure is traceable to "
+            "the detections and to the original images that evidence them."
+        ),
+        "headline": "{compromised} of {total} modules compromised ({pct}\\%) --- "
+        "approximately {kwp} kWp of affected DC capacity (assuming {wp} Wp/module).",
+        "class_table_caption": "Affected capacity by defect class",
+        "col_class": "Defect class",
+        "col_panels": "Modules",
+        "col_kwp": "Affected kWp",
+        "severity_para": "Thermal severity distribution ($\\Delta$T, per IEC TS 62446-3 practice): {breakdown}. Highest recorded $\\Delta$T: {max_dt}$^{{\\circ}}$C.",
+        "severity_critical": "critical",
+        "severity_attention": "attention",
+        "severity_monitoring": "monitoring",
+        "priority_caption": "Maintenance plan --- severity-ranked priorities (top {n})",
+        "col_panel": "Panel",
+        "col_defect": "Defect",
+        "col_dt": "$\\Delta$T ($^{{\\circ}}$C)",
+        "col_severity": "Severity",
+        "dependencies_para": (
+            "\\textbf{On financial impact and maintenance planning:} converting the "
+            "quantities above into revenue loss or a repair schedule depends on "
+            "asset-specific factors that aerial inspection cannot observe: the PPA "
+            "terms or contracted tariff; the DC/AC oversizing ratio (in clipped "
+            "plants, part of the DC loss may not translate into energy loss); module "
+            "technology, nameplate rating and degradation state; string and inverter "
+            "topology; irradiance seasonality; and warranty and insurance terms. For "
+            "this reason, this report presents only verifiable physical quantities. "
+            "An asset-specific financial analysis, combining these findings with the "
+            "plant's commercial parameters, is available upon request."
+        ),
+    },
+}
+
+
+def get_capacity_text(key: str, language: str = "pt-BR") -> str:
+    """Get an affected-capacity section text for the specified language."""
+    lang = language if language in CAPACITY_TEXTS else "pt-BR"
+    return CAPACITY_TEXTS[lang].get(key, key)
+
+
 def get_title_page_text(key: str, language: str = "pt-BR") -> str:
     """Get title page text for the specified language."""
     lang = language if language in TITLE_PAGE_TEXTS else "pt-BR"

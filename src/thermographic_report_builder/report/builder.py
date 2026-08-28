@@ -12,7 +12,9 @@ from pylatex.utils import NoEscape, bold, escape_latex
 from ..models.defect import Panel
 from ..models.report import ReportConfig
 from ..models.annotation_manifest import AnnotationManifest
+from .capacity import compute_capacity_summary
 from ..config.constants import (
+    get_capacity_text,
     DEFECT_COLORS,
     get_defect_labels,
     get_report_abstract,
@@ -201,6 +203,9 @@ class ReportBuilder:
 
         # Section 4: Defect summary table
         self._add_defect_summary_table(doc)
+
+        # Section 4b: Affected capacity summary + severity-ranked maintenance plan
+        self._add_capacity_summary_section(doc)
 
         # Section 5-7: Defect details by type
         self._add_defect_details_by_type(doc)
@@ -588,6 +593,132 @@ RoyalBlue]
                     tabular.append(NoEscape(r"\bottomrule"))
 
             doc.append(NoEscape(r"\FloatBarrier"))
+
+    @staticmethod
+    def _fmt_tokens(text: str, **tokens) -> str:
+        """Substitute {key} tokens without str.format — LaTeX braces (e.g.
+        \\c{c}) would otherwise be parsed as format placeholders."""
+        for k, v in tokens.items():
+            text = text.replace("{" + k + "}", str(v))
+        return text
+
+    def _add_capacity_summary_section(self, doc: pl.Document) -> None:
+        """Affected DC capacity + severity-ranked maintenance plan.
+
+        Physical quantities only — the closing paragraph states explicitly why
+        financial conversion is out of scope for an aerial report (PPA terms,
+        DC/AC oversizing/clipping, module technology, topology, warranty).
+        """
+        lang = self.config.language
+        summary = compute_capacity_summary(self.panel_grid, self.annotation_manifest)
+
+        doc.append(NoEscape(r"\section{" + get_capacity_text("title", lang) + r"}"))
+        doc.append(NoEscape(get_capacity_text("intro", lang)))
+        doc.append(NoEscape(r"\par\medskip"))
+
+        headline = self._fmt_tokens(
+            get_capacity_text("headline", lang),
+            compromised=summary.compromised_panels,
+            total=summary.total_panels,
+            pct=summary.compromised_pct,
+            kwp=summary.affected_kwp,
+            wp=summary.module_wp,
+        )
+        doc.append(NoEscape(r"\begin{center}\fbox{\parbox{0.9\linewidth}{\centering \textbf{" + headline + r"}}}\end{center}"))
+
+        # Per-class capacity table
+        if summary.by_class:
+            defect_labels = get_defect_labels(lang)
+            with doc.create(pl.Table(position="h!")) as table:
+                table.add_caption(get_capacity_text("class_table_caption", lang))
+                table.append(NoEscape(r"\centering"))
+                with doc.create(pl.Tabular("lcc")) as tabular:
+                    tabular.append(NoEscape(r"\toprule"))
+                    tabular.add_row(
+                        [
+                            get_capacity_text("col_class", lang),
+                            get_capacity_text("col_panels", lang),
+                            get_capacity_text("col_kwp", lang),
+                        ],
+                        escape=False,
+                    )
+                    tabular.append(NoEscape(r"\midrule"))
+                    for c in summary.by_class:
+                        tabular.add_row(
+                            [
+                                defect_labels.get(c.defect_type, c.defect_type),
+                                str(c.panels_affected),
+                                f"{c.kwp_affected:.1f}",
+                            ]
+                        )
+                    tabular.append(NoEscape(r"\bottomrule"))
+            doc.append(NoEscape(r"\FloatBarrier"))
+
+        # Severity distribution (when the annotation manifest carries dT)
+        if summary.severity_counts:
+            parts = []
+            for sev_key, label_key in (
+                ("CRITICAL", "severity_critical"),
+                ("ATTENTION", "severity_attention"),
+                ("MONITORING", "severity_monitoring"),
+            ):
+                n = summary.severity_counts.get(sev_key)
+                if n:
+                    parts.append(f"{n} {get_capacity_text(label_key, lang)}")
+            breakdown = ", ".join(parts) if parts else "—"
+            max_dt = f"{summary.max_delta_t:.1f}" if summary.max_delta_t is not None else "—"
+            doc.append(
+                NoEscape(
+                    self._fmt_tokens(
+                        get_capacity_text("severity_para", lang),
+                        breakdown=breakdown,
+                        max_dt=max_dt,
+                    )
+                )
+            )
+            doc.append(NoEscape(r"\par\medskip"))
+
+        # Severity-ranked maintenance worklist
+        if summary.priority_list:
+            defect_labels = get_defect_labels(lang)
+            with doc.create(pl.Table(position="h!")) as table:
+                table.add_caption(
+                    NoEscape(
+                        self._fmt_tokens(
+                            get_capacity_text("priority_caption", lang),
+                            n=len(summary.priority_list),
+                        )
+                    )
+                )
+                table.append(NoEscape(r"\centering"))
+                with doc.create(pl.Tabular("llcc")) as tabular:
+                    tabular.append(NoEscape(r"\toprule"))
+                    tabular.add_row(
+                        [
+                            get_capacity_text("col_panel", lang),
+                            get_capacity_text("col_defect", lang),
+                            NoEscape(get_capacity_text("col_dt", lang)),
+                            get_capacity_text("col_severity", lang),
+                        ],
+                        escape=False,
+                    )
+                    tabular.append(NoEscape(r"\midrule"))
+                    for item in summary.priority_list:
+                        dt = f"{item.delta_t:.1f}" if item.delta_t is not None else "—"
+                        tabular.add_row(
+                            [
+                                item.panel_id,
+                                defect_labels.get(item.defect_type, item.defect_type),
+                                dt,
+                                item.severity.capitalize(),
+                            ]
+                        )
+                    tabular.append(NoEscape(r"\bottomrule"))
+            doc.append(NoEscape(r"\FloatBarrier"))
+
+        # Why no currency figures — and what a financial analysis would require
+        doc.append(NoEscape(get_capacity_text("dependencies_para", lang)))
+        doc.append(NoEscape(r"\par"))
 
     def _add_defect_details_by_type(self, doc: pl.Document) -> None:
         """Add three dedicated sections for each defect type."""
