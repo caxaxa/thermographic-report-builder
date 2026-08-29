@@ -143,7 +143,7 @@ REPORT_TEXTS = {
         "crea_number": "Número CREA",
         "location": "Localização",
         "inspection_date": "Data da Inspeção",
-        "footer_text": "GreTA®, Versão Beta - 2026 \\quad Desenvolvido por Aisol",
+        "footer_text": "GreTA® - 2026 \\quad Desenvolvido por Aisol",
     },
     "en-US": {
         "report_title": "Thermographic Report",
@@ -169,7 +169,7 @@ REPORT_TEXTS = {
         "crea_number": "CREA Number",
         "location": "Location",
         "inspection_date": "Inspection Date",
-        "footer_text": "GreTA®, Beta Version - 2026 \\quad Developed by Aisol",
+        "footer_text": "GreTA® - 2026 \\quad Developed by Aisol",
     },
 }
 
