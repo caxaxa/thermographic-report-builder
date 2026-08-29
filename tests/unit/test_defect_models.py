@@ -176,3 +176,41 @@ class TestDefect:
     def test_is_offline_panel(self):
         d = self._make_defect("offlinepanels")
         assert d.is_offline_panel is True
+
+
+class TestBoxSanitization:
+    """Stray annotations must not abort a whole report (2026-08-29 incident:
+    3 off-canvas boxes out of 1,512 failed a customer's report)."""
+
+    def _payload(self, boxes):
+        return {"boundingBox": {"boundingBoxes": boxes}}
+
+    def _load(self, tmp_path, boxes):
+        import json as _json
+        from thermographic_report_builder.models.defect import DefectLabelsJSON
+        p = tmp_path / "labels.json"
+        p.write_text(_json.dumps(self._payload(boxes)))
+        return DefectLabelsJSON.from_json_file(str(p))
+
+    def test_drops_fully_offcanvas_box(self, tmp_path):
+        boxes = [
+            {"left": 10, "top": 10, "width": 50, "height": 50, "label": "hotspots"},
+            {"left": -2440, "top": -2455, "width": 156, "height": 73, "label": "offlinepanels"},
+        ]
+        labels = self._load(tmp_path, boxes)
+        assert len(labels.bounding_boxes) == 1
+        assert labels.bounding_boxes[0].label == "hotspots"
+
+    def test_clamps_partially_visible_box(self, tmp_path):
+        # Left edge off-canvas by 20px: clamp to 0 and keep the right edge at 30.
+        boxes = [{"left": -20, "top": -5, "width": 50, "height": 40, "label": "hotspots"}]
+        labels = self._load(tmp_path, boxes)
+        bb = labels.bounding_boxes[0]
+        assert (bb.left, bb.width) == (0, 30)
+        assert (bb.top, bb.height) == (0, 35)
+        assert bb.right == 30
+
+    def test_clean_boxes_untouched(self, tmp_path):
+        boxes = [{"left": 5, "top": 6, "width": 7, "height": 8, "label": "default_panel"}]
+        bb = self._load(tmp_path, boxes).bounding_boxes[0]
+        assert (bb.left, bb.top, bb.width, bb.height) == (5, 6, 7, 8)

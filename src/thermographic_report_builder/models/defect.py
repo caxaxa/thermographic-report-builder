@@ -2,8 +2,12 @@
 
 from enum import Enum
 from typing import Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 import json
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class DefectType(str, Enum):
@@ -177,8 +181,58 @@ class DefectLabelsJSON(BaseModel):
         else:
             boxes_data = []
 
-        bounding_boxes = [BoundingBox(**bb) for bb in boxes_data]
+        bounding_boxes = cls._sanitize_boxes(boxes_data)
         return cls(bounding_boxes=bounding_boxes)
+
+    @staticmethod
+    def _sanitize_boxes(boxes_data: list[dict]) -> list["BoundingBox"]:
+        """Build boxes, tolerating stray annotations near/off the canvas.
+
+        Annotation tools let a box be dragged partly or fully off the image,
+        which yields negative left/top. BoundingBox requires >= 0, so a single
+        stray box used to abort an entire report (2026-08-29: 3 junk boxes out
+        of 1,512 killed a customer report). Clamp the partially-visible ones
+        into frame and drop the ones with no on-canvas area.
+        """
+        boxes: list[BoundingBox] = []
+        clamped = dropped = invalid = 0
+        for bb in boxes_data:
+            data = dict(bb)
+            left = data.get("left", 0)
+            top = data.get("top", 0)
+            width = data.get("width", 0)
+            height = data.get("height", 0)
+
+            # No visible area once projected onto the canvas -> carries nothing.
+            if left + width <= 0 or top + height <= 0:
+                dropped += 1
+                continue
+
+            if left < 0:
+                width += left  # keep the right edge fixed
+                left = 0
+                clamped += 1
+            if top < 0:
+                height += top  # keep the bottom edge fixed
+                top = 0
+                clamped += 1
+
+            data.update(left=left, top=top, width=width, height=height)
+            try:
+                boxes.append(BoundingBox(**data))
+            except ValidationError:
+                invalid += 1
+
+        if clamped or dropped or invalid:
+            logger.warning(
+                "Sanitized annotation boxes: %d clamped, %d dropped (off-canvas), "
+                "%d invalid, %d kept",
+                clamped,
+                dropped,
+                invalid,
+                len(boxes),
+            )
+        return boxes
 
     def get_panels(self) -> list[BoundingBox]:
         """Get all solar panel bounding boxes."""
