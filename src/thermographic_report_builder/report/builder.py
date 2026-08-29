@@ -808,15 +808,15 @@ RoyalBlue]
             fig.append(NoEscape(r"\centering"))
 
             if minimap_img_path.exists():
-                fig.append(NoEscape(r"\subfloat[" + context_map + r"]{\includegraphics[width=0.30\linewidth]{" + minimap_img + r"}}"))
+                fig.append(NoEscape(r"\subfloat[" + context_map + r"]{\includegraphics[width=0.30\linewidth,height=0.25\textheight,keepaspectratio]{" + minimap_img + r"}}"))
                 fig.append(NoEscape(r"\hfill"))
 
             if crop_img_path.exists():
-                fig.append(NoEscape(r"\subfloat[" + problem_location + r"]{\includegraphics[width=0.30\linewidth]{" + crop_img + r"}}"))
+                fig.append(NoEscape(r"\subfloat[" + problem_location + r"]{\includegraphics[width=0.30\linewidth,height=0.25\textheight,keepaspectratio]{" + crop_img + r"}}"))
                 fig.append(NoEscape(r"\hfill"))
 
             if drone_img_path.exists():
-                fig.append(NoEscape(r"\subfloat[" + drone_image + r"]{\includegraphics[width=0.30\linewidth]{" + drone_img + r"}}"))
+                fig.append(NoEscape(r"\subfloat[" + drone_image + r"]{\includegraphics[width=0.30\linewidth,height=0.25\textheight,keepaspectratio]{" + drone_img + r"}}"))
 
             fig.append(NoEscape(r"\caption{" + overall_caption + r"}"))
 
@@ -986,7 +986,7 @@ RoyalBlue]
                     if layer_img_path.exists():
                         fig.append(
                             NoEscape(
-                                r"\subfloat[Localização]{\includegraphics[width=0.31\linewidth]{"
+                                r"\subfloat[Localização]{\includegraphics[width=0.31\linewidth,height=0.25\textheight,keepaspectratio]{"
                                 + layer_img
                                 + r"}}"
                             )
@@ -997,7 +997,7 @@ RoyalBlue]
                     if crop_img_path.exists():
                         fig.append(
                             NoEscape(
-                                r"\subfloat[Detalhe]{\includegraphics[width=0.31\linewidth]{"
+                                r"\subfloat[Detalhe]{\includegraphics[width=0.31\linewidth,height=0.25\textheight,keepaspectratio]{"
                                 + crop_img
                                 + r"}}"
                             )
@@ -1008,7 +1008,7 @@ RoyalBlue]
                     if drone_img_path.exists():
                         fig.append(
                             NoEscape(
-                                r"\subfloat[Imagem Térmica]{\includegraphics[width=0.31\linewidth]{"
+                                r"\subfloat[Imagem Térmica]{\includegraphics[width=0.31\linewidth,height=0.25\textheight,keepaspectratio]{"
                                 + drone_img
                                 + r"}}"
                             )

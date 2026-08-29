@@ -214,3 +214,19 @@ class TestBoxSanitization:
         boxes = [{"left": 5, "top": 6, "width": 7, "height": 8, "label": "default_panel"}]
         bb = self._load(tmp_path, boxes).bounding_boxes[0]
         assert (bb.left, bb.top, bb.width, bb.height) == (5, 6, 7, 8)
+
+
+class TestThermalSuffixes:
+    """Radiometric frames must be discovered regardless of drone vendor
+    convention — XT2 ships _R.JPG, M30T ships _T.JPG (2026-08-29: an XT2
+    flight produced zero temperatures because only _t.jpg was matched)."""
+
+    def test_suffix_set_covers_known_conventions(self):
+        from thermographic_report_builder.io.s3_client import THERMAL_SUFFIXES
+        for name in ("DJI_0001_T.JPG", "DJI_0001_R.JPG", "dji_0002_t.jpeg", "x_r.jpeg"):
+            assert name.lower().endswith(THERMAL_SUFFIXES), name
+
+    def test_visual_frames_excluded(self):
+        from thermographic_report_builder.io.s3_client import THERMAL_SUFFIXES
+        for name in ("DJI_0001.jpg", "DJI_0001_W.JPG", "IMG_1234.JPG"):
+            assert not name.lower().endswith(THERMAL_SUFFIXES), name

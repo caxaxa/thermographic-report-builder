@@ -13,6 +13,13 @@ from ..utils.exceptions import S3DownloadError, S3UploadError
 logger = get_logger(__name__)
 
 
+# Radiometric frame suffixes by vendor convention: _T (DJI M30T/M3T) and
+# _R (DJI XT2 / Mavic 2 Enterprise Advanced R-JPEG). Listing only "_t.jpg"
+# silently yielded zero thermal images for an XT2 flight — no temperatures, no
+# delta-T, no severity in the report (2026-08-29).
+THERMAL_SUFFIXES = ("_t.jpg", "_t.jpeg", "_r.jpg", "_r.jpeg")
+
+
 class S3Client(BaseS3Client):
     """Abstraction for S3 operations.
 
@@ -157,7 +164,7 @@ class S3Client(BaseS3Client):
                     key = obj.get("Key")
                     if not key:
                         continue
-                    if key.lower().endswith("_t.jpg"):
+                    if key.lower().endswith(THERMAL_SUFFIXES):
                         keys.append(key)
 
             logger.info(f"Found {len(keys)} thermal images in uploads bucket")
