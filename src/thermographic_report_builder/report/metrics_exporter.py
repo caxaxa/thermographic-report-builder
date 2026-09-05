@@ -316,7 +316,9 @@ def export_panel_grid_json(
                     temp_data = temp_index[defect_id]
                     defect_entry["hot_temp"] = temp_data["hot_temp"]
                     defect_entry["cold_temp"] = temp_data["cold_temp"]
-                    defect_entry["delta_t"] = round(temp_data["delta_t"], 1)
+                    # None when the geometry was untrusted (no reliable reading).
+                    dt = temp_data["delta_t"]
+                    defect_entry["delta_t"] = round(dt, 1) if dt is not None else None
                     defect_entry["severity"] = temp_data["severity"]
 
                 defects.append(defect_entry)

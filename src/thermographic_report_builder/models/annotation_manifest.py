@@ -46,8 +46,17 @@ class AnnotationEntry(BaseModel):
     annotated_image: str = Field(description="Local filename of annotated image")
     hot_point: AnnotationPoint = Field(description="Hot point in thermal coordinates")
     cold_point: AnnotationPoint = Field(description="Cold/reference point in thermal coordinates")
-    delta_t: float = Field(description="Temperature difference (hot - cold) in Celsius")
-    severity: str = Field(description="Severity classification (CRITICAL, ATTENTION, MONITORING)")
+    delta_t: Optional[float] = Field(
+        default=None,
+        description=(
+            "Temperature difference (hot - cold) in Celsius. None when the "
+            "reconstruction's geometry could not be trusted, so the sampled point "
+            "is not known to lie on the module (gps_matcher._untrusted_geometry)."
+        ),
+    )
+    severity: str = Field(
+        description="Severity classification (CRITICAL, ATTENTION, MONITORING, UNKNOWN)"
+    )
     flight_direction: Optional[str] = Field(
         default=None,
         description="Flight direction ('north' or 'south'). If 'south', image needs 180° rotation for display."

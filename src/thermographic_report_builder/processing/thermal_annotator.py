@@ -556,6 +556,7 @@ class ThermalAnnotator:
         hot_search_radius: int = 60,
         excluded_hot_points: Optional[List[Tuple[int, int]]] = None,
         min_hot_distance: int = 10,
+        center_on_defect: bool = False,
     ) -> Optional[AnnotatedThermalImage]:
         """
         Create an annotated thermal image centered on the defect with hot/cold markers.
@@ -663,8 +664,16 @@ class ThermalAnnotator:
                 )
                 return None
 
-            center_pixel_x = hot_cold.hot_x
-            center_pixel_y = hot_cold.hot_y
+            # Normally we centre on the detected hot point. When the caller cannot
+            # trust the projected pixel (see gps_matcher._untrusted_geometry), the
+            # hottest pixel nearby is as likely to be sun-baked soil as the module,
+            # so centre on the supplied point and let the wider crop carry the defect.
+            if center_on_defect:
+                center_pixel_x = int(defect_pixel_x)
+                center_pixel_y = int(defect_pixel_y)
+            else:
+                center_pixel_x = hot_cold.hot_x
+                center_pixel_y = hot_cold.hot_y
             hot_temp = hot_cold.hot_temp
             cold_temp = hot_cold.cold_temp
             delta_t = hot_cold.delta_t
@@ -715,25 +724,36 @@ class ThermalAnnotator:
             outline_thickness = 5
             marker_thickness = 4
 
-            # Red circle with white outline for HOT point
-            cv2.circle(canvas, (hot_canvas_x, hot_canvas_y), marker_size + 3, (255, 255, 255), outline_thickness)
-            cv2.circle(canvas, (hot_canvas_x, hot_canvas_y), marker_size, (0, 0, 255), marker_thickness)
-            # Cross inside
-            cv2.drawMarker(
-                canvas,
-                (hot_canvas_x, hot_canvas_y),
-                (0, 0, 255),
-                cv2.MARKER_CROSS,
-                marker_size - 4,
-                marker_thickness,
-            )
+            # When the caller could not trust the projected pixel, hot/cold are just
+            # the local extremes near the frame centre -- on a site where bare soil
+            # runs hotter than the modules that is usually dirt. A confident
+            # crosshair on dirt is worse than none; the wide crop is the deliverable.
+            show_markers = not center_on_defect
+
+            if show_markers:
+                # Red circle with white outline for HOT point
+                cv2.circle(canvas, (hot_canvas_x, hot_canvas_y), marker_size + 3, (255, 255, 255), outline_thickness)
+                cv2.circle(canvas, (hot_canvas_x, hot_canvas_y), marker_size, (0, 0, 255), marker_thickness)
+                # Cross inside
+                cv2.drawMarker(
+                    canvas,
+                    (hot_canvas_x, hot_canvas_y),
+                    (0, 0, 255),
+                    cv2.MARKER_CROSS,
+                    marker_size - 4,
+                    marker_thickness,
+                )
 
             # --- Draw COLD marker (BLUE) ---
             cold_canvas_x = int(10 + (hot_cold.cold_x - x1) * scale_to_canvas_x)
             cold_canvas_y = int(10 + (hot_cold.cold_y - y1) * scale_to_canvas_y)
 
             # Only draw if cold point is within the cropped region
-            if 10 <= cold_canvas_x <= 10 + img_area_width and 10 <= cold_canvas_y <= 10 + img_area_height:
+            if (
+                show_markers
+                and 10 <= cold_canvas_x <= 10 + img_area_width
+                and 10 <= cold_canvas_y <= 10 + img_area_height
+            ):
                 # Blue circle with white outline for COLD point
                 cv2.circle(canvas, (cold_canvas_x, cold_canvas_y), marker_size + 3, (255, 255, 255), outline_thickness)
                 cv2.circle(canvas, (cold_canvas_x, cold_canvas_y), marker_size, (255, 128, 0), marker_thickness)

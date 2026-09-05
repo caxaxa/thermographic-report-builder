@@ -928,10 +928,18 @@ RoyalBlue]
         doc.append(NoEscape(r"\toprule"))
         doc.append(NoEscape(r"\textbf{" + param_label + r"} & \textbf{" + value_label + r"} \\"))
         doc.append(NoEscape(r"\midrule"))
-        doc.append(NoEscape(f"{hotpoint_label} & {entry.hot_point.temp:.1f}°C \\\\"))
-        doc.append(NoEscape(f"{reference_label} & {entry.cold_point.temp:.1f}°C \\\\"))
-        doc.append(NoEscape(f"{delta_t_label} & {entry.delta_t:.1f}°C \\\\"))
-        doc.append(NoEscape(f"{classification_label} & \\textcolor{{{severity_color}}}{{\\textbf{{{severity_text}}}}} \\\\"))
+        # Readings are None only when the geometry was untrusted, i.e. the sampled
+        # point is not known to sit on the module. Print an em dash, not a number.
+        def _temp(value) -> str:
+            return f"{value:.1f}°C" if value is not None else "—"
+
+        doc.append(NoEscape(f"{hotpoint_label} & {_temp(entry.hot_point.temp)} \\\\"))
+        doc.append(NoEscape(f"{reference_label} & {_temp(entry.cold_point.temp)} \\\\"))
+        doc.append(NoEscape(f"{delta_t_label} & {_temp(entry.delta_t)} \\\\"))
+        if entry.delta_t is None:
+            doc.append(NoEscape(f"{classification_label} & — \\\\"))
+        else:
+            doc.append(NoEscape(f"{classification_label} & \\textcolor{{{severity_color}}}{{\\textbf{{{severity_text}}}}} \\\\"))
         doc.append(NoEscape(r"\bottomrule"))
         doc.append(NoEscape(r"\end{tabular}"))
         doc.append(NoEscape(r"\end{center}"))
@@ -1126,9 +1134,12 @@ RoyalBlue]
             # Add flight path visualization
             if "flight_path_static" in viz_paths:
                 with doc.create(pl.Figure(position="h!")) as fig:
+                    # Height cap: tall, narrow plants (Bento's is 4.2:1) render
+                    # ~3x taller than the page from width alone and run off it.
+                    # keepaspectratio makes whichever limit binds first win.
                     fig.add_image(
                         str(viz_paths["flight_path_static"].relative_to(self.images_dir.parent)),
-                        width=NoEscape(r"0.75\textwidth")
+                        width=NoEscape(r"0.75\textwidth,height=0.62\textheight,keepaspectratio")
                     )
                     fig.add_caption(flight_path_caption)
 
@@ -1141,7 +1152,7 @@ RoyalBlue]
                 with doc.create(pl.Figure(position="h!")) as fig:
                     fig.add_image(
                         str(viz_paths["dashboard"].relative_to(self.images_dir.parent)),
-                        width=NoEscape(r"0.95\textwidth")
+                        width=NoEscape(r"0.95\textwidth,height=0.62\textheight,keepaspectratio")
                     )
                     fig.add_caption(dashboard_caption)
 

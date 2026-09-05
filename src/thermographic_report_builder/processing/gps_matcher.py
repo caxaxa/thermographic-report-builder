@@ -21,6 +21,7 @@ Coordinate spaces:
 """
 
 import csv
+import math
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import cv2
@@ -61,6 +62,55 @@ _TRACK_COORD_MODES = ("pixel", "norm01", "centered", "centered_max")
 _TRACK_MODE_SAMPLE_LIMIT = 20000
 _TRACK_MAX_SAMPLES_PER_IMAGE = 5000
 _TRACK_MIN_POINTS = 30
+
+# Plausible horizontal field of view for a real drone payload. Thermal cores sit
+# at 25-60 deg; the widest RGB wide-angles reach ~90. Anything outside this band
+# means the reconstruction's intrinsics are not physical, so every ortho->raw
+# projection built on them (source map, reprojection, mesh) is wrong by metres.
+#
+# Seen in production 2026-08-29 (DJI XT2): ODM derives sensor width from EXIF
+# FocalPlaneXResolution, treating it as pixels-per-unit per the EXIF spec. The
+# XT2 instead writes the sensor WIDTH there (10.88 mm = 640 x 17 um) with unit
+# "mm", so ODM computed 640/10.88 = 58.8 mm, giving focal_ratio 13/58.8 = 0.221
+# instead of 13/10.88 = 1.195 -- a 139 deg camera. Bundle adjustment then placed
+# the ground ~6 m below the drone instead of 30 m.
+MAX_PLAUSIBLE_HFOV_DEG = 100.0
+MIN_PLAUSIBLE_HFOV_DEG = 5.0
+
+# When geometry is untrusted we cannot point at a pixel, but we can still show
+# the right frame: the defect is within ~5 m of nadir on a ~25 m footprint, so a
+# wide crop centred on the frame centre contains it.
+UNTRUSTED_GEOMETRY_ZOOM_PX = 500
+
+# Zoom window for the thermal-analysis figure when the geometry IS trusted.
+# M30T keeps its historical 200 px. Thermal-only cores (640x512) get a tighter
+# window: at ~3.9 cm/px that is 5.5 m rather than 7.8 m, which fills the frame
+# with the module now that the XT2 focal + principal-point fixes land the crop
+# on the defect. Only tighten a path whose localisation you have verified --
+# a tight crop on a bad pixel is worse than a loose one.
+THERMAL_ONLY_ZOOM_PX = 140
+M30T_ZOOM_PX = 200
+
+
+def reconstruction_hfov_degrees(camera: Optional[dict]) -> Optional[float]:
+    """Horizontal FOV implied by an OpenSfM camera model, or None if unknowable.
+
+    OpenSfM stores focal normalised by max(width, height), so the pixel focal is
+    ``focal * max(w, h)``.
+    """
+    if not camera:
+        return None
+    width = camera.get("width")
+    height = camera.get("height")
+    focal = camera.get("focal_x", camera.get("focal"))
+    if not width or not height or not focal or float(focal) <= 0:
+        return None
+    focal_px = float(focal) * max(int(width), int(height))
+    if focal_px <= 0:
+        return None
+    return 2.0 * math.degrees(math.atan((int(width) / 2.0) / focal_px))
+
+
 @dataclass
 class DefectMatch:
     """Result of matching a defect to a raw image."""
@@ -122,6 +172,12 @@ class GPSMatcher:
         # Flag to force GPS-only matching when reprojection is unsafe (e.g., size mismatch).
         # This is detected during _index_raw_images() based on image dimensions vs reconstruction.
         self._use_gps_fallback = False
+        # Set when the reconstruction's intrinsics are not physically possible, so
+        # every ortho->raw projection derived from them is wrong by metres. We keep
+        # the image match (that part stays correct) but stop pointing at a pixel.
+        self._untrusted_geometry = False
+        # Overrides the thermal-analysis zoom for testing.
+        self._zoom_override: Optional[int] = None
         # Track whether raw images are thermal-only (e.g., M3T 640x512) for coordinate alignment.
         self._thermal_only_images = False
         self._detected_image_width = None
@@ -491,10 +547,24 @@ class GPSMatcher:
                                     f"using image center ({original_pixel_x:.0f}, {original_pixel_y:.0f}) as fallback"
                                 )
 
+                            if self._untrusted_geometry:
+                                # The image match is sound (it survives bad intrinsics),
+                                # but the pixel came from the same broken reconstruction.
+                                # Discard it: the frame centre is provably nearer, since
+                                # the defect lies within ~5 m of nadir on a ~25 m
+                                # footprint, and a wide crop around it will contain it.
+                                fallback_w = self._detected_image_width or 1280
+                                fallback_h = self._detected_image_height or 1024
+                                original_pixel_x = fallback_w / 2.0
+                                original_pixel_y = fallback_h / 2.0
+
                             # Refine to the hottest nearby pixel to avoid edge offsets
                             # SKIP refinement for mesh backtracking to preserve determinism
                             # Use smaller radius for source_map (already precise) vs GPS/reprojection (less precise)
-                            should_refine = match.method != "mesh"
+                            # SKIP when geometry is untrusted: the start point is metres
+                            # off, so "hottest pixel nearby" locks onto sun-baked soil and
+                            # collapses several defects in one frame onto the same pixel.
+                            should_refine = match.method != "mesh" and not self._untrusted_geometry
                             if should_refine:
                                 try:
                                     from ..utils.thermal_alignment import ImageFormat
@@ -542,13 +612,24 @@ class GPSMatcher:
                             if self._detected_image_width and self._detected_image_height:
                                 visual_size = (self._detected_image_width, self._detected_image_height)
 
-                            match.temperature = self.thermal_extractor.extract_temperature_at_pixel(
-                                image_path=match.image_path,
-                                pixel_x=int(original_pixel_x),
-                                pixel_y=int(original_pixel_y),
-                                image_format=image_format,
-                                visual_size=visual_size,
-                            )
+                            if self._untrusted_geometry:
+                                # Sampling a temperature here would read whatever the
+                                # frame centre happens to be -- usually soil, which on
+                                # this kind of site runs hotter than the modules. An
+                                # absent reading is better than a confident wrong one.
+                                match.temperature = None
+                                logger.debug(
+                                    f"Temperature suppressed for {panel.panel_id} defect "
+                                    f"{defect_idx}: geometry untrusted"
+                                )
+                            else:
+                                match.temperature = self.thermal_extractor.extract_temperature_at_pixel(
+                                    image_path=match.image_path,
+                                    pixel_x=int(original_pixel_x),
+                                    pixel_y=int(original_pixel_y),
+                                    image_format=image_format,
+                                    visual_size=visual_size,
+                                )
                             if match.temperature:
                                 logger.info(
                                     f"Temperature at {panel.panel_id} defect {defect_idx}: "
@@ -561,7 +642,14 @@ class GPSMatcher:
                             if self.thermal_annotator:
                                 # Project panel bbox corners to raw image coordinates (skip for non-M30T)
                                 panel_bbox_visual = None
-                                if self.camera_projector.available and not self._use_gps_fallback:
+                                if (
+                                    self.camera_projector.available
+                                    and not self._use_gps_fallback
+                                    # Projected panel corners come from the same bad
+                                    # intrinsics; constraining the hot search to that box
+                                    # would just pin the marker to the wrong ground.
+                                    and not self._untrusted_geometry
+                                ):
                                     # Get panel corners in cropped orthophoto coordinates
                                     cropped_left = panel.bbox.left
                                     cropped_top = panel.bbox.top
@@ -677,6 +765,11 @@ class GPSMatcher:
                                     hot_search_radius=hot_search_radius,  # Match refinement radius
                                     excluded_hot_points=excluded_hot_points,
                                     min_hot_distance=10,
+                                    # Untrusted geometry: show a wide frame-centred view
+                                    # that provably contains the defect, rather than a
+                                    # tight close-up of the wrong ground.
+                                    zoom_size=self._thermal_zoom_px(),
+                                    center_on_defect=self._untrusted_geometry,
                                 )
 
                                 if annotated:
@@ -707,11 +800,21 @@ class GPSMatcher:
 
                                     # Create annotated raw image with zoom box indicator
                                     # This shows users where the thermal crop comes from
+                                    # The box must outline the crop we actually produced,
+                                    # so mirror the untrusted-geometry centre and size.
                                     self._save_annotated_raw_image(
                                         raw_image_path=match.image_path,
-                                        hot_point_x=annotated.hot_cold.hot_x,
-                                        hot_point_y=annotated.hot_cold.hot_y,
-                                        zoom_size=200,  # Same as thermal_annotator default
+                                        hot_point_x=(
+                                            int(original_pixel_x)
+                                            if self._untrusted_geometry
+                                            else annotated.hot_cold.hot_x
+                                        ),
+                                        hot_point_y=(
+                                            int(original_pixel_y)
+                                            if self._untrusted_geometry
+                                            else annotated.hot_cold.hot_y
+                                        ),
+                                        zoom_size=self._thermal_zoom_px(),
                                         output_dir=output_dir,
                                         defect_type_str=defect_type_str,
                                         panel_id=panel.panel_id,
@@ -761,18 +864,42 @@ class GPSMatcher:
                                         raw_image_path=s3_raw_path,
                                         raw_image_name=match.image_name,
                                         annotated_image=annotated_filename,
+                                        # Untrusted geometry: the hot/cold pair is just
+                                        # the extremes near the frame centre, usually
+                                        # sun-baked soil on this kind of site. This
+                                        # entry feeds the capacity table and
+                                        # metrics.json as well as the per-defect page,
+                                        # so null the readings at the source rather
+                                        # than publishing a confident wrong number.
                                         hot_point=AnnotationPoint(
                                             x=int(hot_thermal_x),
                                             y=int(hot_thermal_y),
-                                            temp=annotated.hot_cold.hot_temp,
+                                            temp=(
+                                                None
+                                                if self._untrusted_geometry
+                                                else annotated.hot_cold.hot_temp
+                                            ),
                                         ),
                                         cold_point=AnnotationPoint(
                                             x=int(cold_thermal_x),
                                             y=int(cold_thermal_y),
-                                            temp=annotated.hot_cold.cold_temp,
+                                            temp=(
+                                                None
+                                                if self._untrusted_geometry
+                                                else annotated.hot_cold.cold_temp
+                                            ),
                                         ),
-                                        delta_t=annotated.hot_cold.hot_temp - annotated.hot_cold.cold_temp,
-                                        severity=annotated.severity,
+                                        delta_t=(
+                                            None
+                                            if self._untrusted_geometry
+                                            else annotated.hot_cold.hot_temp
+                                            - annotated.hot_cold.cold_temp
+                                        ),
+                                        severity=(
+                                            "UNKNOWN"
+                                            if self._untrusted_geometry
+                                            else annotated.severity
+                                        ),
                                         flight_direction=flight_dir,  # For UI rotation
                                     )
                                     self.annotation_entries.append(entry)
@@ -795,6 +922,19 @@ class GPSMatcher:
         )
 
         return matched_count, defect_matches
+
+    def _thermal_zoom_px(self) -> int:
+        """Zoom window for the thermal-analysis figure and its zoom-box overlay.
+
+        Wide and frame-centred when the geometry cannot be trusted; otherwise
+        tight for thermal-only cores (whose localisation we verified after the
+        XT2 focal + principal-point fixes) and unchanged at 200 px for M30T.
+        """
+        if self._zoom_override is not None:
+            return self._zoom_override
+        if self._untrusted_geometry:
+            return UNTRUSTED_GEOMETRY_ZOOM_PX
+        return THERMAL_ONLY_ZOOM_PX if self._thermal_only_images else M30T_ZOOM_PX
 
     def _find_best_match(
         self,
@@ -1379,9 +1519,36 @@ class GPSMatcher:
                                 logger.info(
                                     "Reprojection enabled: reconstruction camera size matches raw images."
                                 )
+
                         else:
                             logger.info(
                                 "Reprojection enabled: reconstruction camera dimensions unavailable for validation."
+                            )
+
+                        # Matching dimensions are not enough: the focal can still be
+                        # non-physical, which silently poisons every projection while
+                        # leaving image SELECTION correct. Check it explicitly.
+                        hfov = reconstruction_hfov_degrees(camera_model)
+                        if hfov is None:
+                            logger.info(
+                                "Reconstruction FOV unavailable for validation; "
+                                "assuming intrinsics are usable."
+                            )
+                        elif not (MIN_PLAUSIBLE_HFOV_DEG <= hfov <= MAX_PLAUSIBLE_HFOV_DEG):
+                            self._untrusted_geometry = True
+                            logger.error(
+                                f"UNTRUSTED GEOMETRY: reconstruction implies a {hfov:.0f} deg "
+                                f"horizontal FOV (focal={camera_model.get('focal_x')} normalised, "
+                                f"{cam_width}x{cam_height}), outside the plausible "
+                                f"{MIN_PLAUSIBLE_HFOV_DEG:.0f}-{MAX_PLAUSIBLE_HFOV_DEG:.0f} deg range. "
+                                "Ortho->raw pixel coordinates from this reconstruction are wrong by "
+                                "metres. Falling back to wide frame-centred crops and suppressing "
+                                "temperature readings. Fix the camera intrinsics and re-run ODM to "
+                                "restore precise defect localisation."
+                            )
+                        else:
+                            logger.info(
+                                f"Reconstruction FOV plausible ({hfov:.0f} deg horizontal)."
                             )
 
         except Exception as e:
