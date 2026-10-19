@@ -34,7 +34,7 @@ dependencies = [
     # Geospatial
     "shapely>=2.0.0",
     "pyproj>=3.6.0",
-    "GDAL==3.10.*",  # For flight visualization GeoTIFF parsing (pinned to Debian version)
+    "GDAL>=3.10,<3.13",  # For flight visualization GeoTIFF parsing (pinned to Debian version)
     "folium>=0.14.0",  # For interactive flight path maps
     "matplotlib>=3.7.0",  # For flight visualization charts
 
