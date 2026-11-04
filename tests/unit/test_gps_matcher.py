@@ -33,6 +33,7 @@ def _stub_gps_matcher(**overrides):
     obj.camera_projector.shots = {}
     obj._track_coord_mode = None
     obj._track_calibration_offsets = {}
+    obj._raw_download_failures = {}
     for key, val in overrides.items():
         setattr(obj, key, val)
     return obj
@@ -378,13 +379,13 @@ class TestIndexRawImages:
     """Tests for the two-phase (sync first image + parallel rest) indexing."""
 
     @staticmethod
-    def _make_matcher(keys, fail_names=frozenset()):
+    def _make_matcher(keys, fail_names=frozenset(), error="simulated download failure"):
         s3 = MagicMock()
         s3.list_raw_images.return_value = keys
 
         def fake_download(s3_key, local_path):
             if Path(s3_key).name in fail_names:
-                raise RuntimeError("simulated download failure")
+                raise RuntimeError(error)
             return local_path
 
         s3.download_raw_image.side_effect = fake_download
@@ -458,3 +459,28 @@ class TestIndexRawImages:
 
         assert matcher._detected_image_width == 640
         assert len(matcher.image_cache) == 4
+
+    def test_archived_images_fail_the_job(self, tmp_path):
+        """Glacier-archived uploads must stop the report, not ship one without temperatures."""
+        from thermographic_report_builder.utils.exceptions import ProcessingError
+
+        keys = [f"user/projects/proj/images/DJI_{i:03d}_T.JPG" for i in range(4)]
+        archived = "An error occurred (InvalidObjectState) when calling the GetObject operation"
+        matcher = self._make_matcher(keys, fail_names={"DJI_002_T.JPG"}, error=archived)
+
+        def fake_exif(path):
+            return None, self._exif_for(path.name, int(path.name[4:7]))
+
+        with patch(
+            "thermographic_report_builder.processing.gps_matcher.load_raw_image_with_exif",
+            side_effect=fake_exif,
+        ), pytest.raises(ProcessingError, match="archived in S3 Glacier"):
+            matcher._index_raw_images(tmp_path)
+
+    def test_no_downloadable_images_fails_the_job(self, tmp_path):
+        from thermographic_report_builder.utils.exceptions import ProcessingError
+
+        keys = [f"user/projects/proj/images/DJI_{i:03d}_T.JPG" for i in range(3)]
+        matcher = self._make_matcher(keys, fail_names={Path(k).name for k in keys})
+        with pytest.raises(ProcessingError, match="None of the 3 raw images"):
+            matcher._index_raw_images(tmp_path)

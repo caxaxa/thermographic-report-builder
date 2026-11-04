@@ -42,6 +42,7 @@ from ..models.annotation_manifest import (
 from ..io.s3_client import S3Client
 from ..io.image_loader import load_raw_image_with_exif, save_image
 from ..config import settings
+from ..utils.exceptions import ProcessingError
 from ..utils.logger import get_logger
 from ..utils.geospatial import PixelToLatLonConverter
 from .camera_projector import CameraProjector, RawImageMatch, load_reconstruction
@@ -166,6 +167,8 @@ class GPSMatcher:
         self.s3_client = s3_client
         self.geo_converter = geo_converter
         self.image_cache: Dict[str, dict] = {}  # Cache GPS data to avoid re-reading
+        # filename -> error for raw images that could not be downloaded (see _check_raw_downloads)
+        self._raw_download_failures: Dict[str, str] = {}
         self.orientation_map: Dict[str, FlightDirection] = {}  # filename -> flight direction
         self.annotation_entries: List[AnnotationEntry] = []  # Collect annotations for manifest
 
@@ -1485,6 +1488,30 @@ class GPSMatcher:
                         )
 
         logger.info(f"Indexed {len(self.image_cache)} images with GPS data")
+        self._check_raw_downloads(total)
+
+    def _check_raw_downloads(self, total: int) -> None:
+        """Fail the job when the raw images can't be read, instead of shipping a report without temperatures.
+
+        Archived uploads (S3 Glacier: GetObject -> InvalidObjectState) used to drop every image silently, and the
+        report went out with no crops or temperatures. Lifecycle archives a project's images together, so a single
+        archived image means the project needs a restore before the report can be built.
+        """
+        failures = self._raw_download_failures
+        if not failures:
+            return
+        archived = sorted(n for n, err in failures.items() if "InvalidObjectState" in err)
+        if archived:
+            raise ProcessingError(
+                f"{len(archived)} of {total} raw images are archived in S3 Glacier (e.g. {archived[0]}) and cannot "
+                "be read. Restore the project's uploads, then re-run the report."
+            )
+        if len(failures) == total:
+            raise ProcessingError(
+                f"None of the {total} raw images could be downloaded (e.g. {next(iter(failures.values()))}). "
+                "Refusing to build a report without temperatures."
+            )
+        logger.warning(f"{len(failures)} of {total} raw images could not be downloaded: {sorted(failures)[:10]}")
 
     def _index_single_raw_image(
         self, s3_key: str, temp_dir: Path, run_detection: bool = False
@@ -1505,8 +1532,14 @@ class GPSMatcher:
         local_path = temp_dir / filename
 
         try:
-            # Download image
             self.s3_client.download_raw_image(s3_key, local_path)
+        except Exception as e:
+            cause = f"{e} {e.__cause__ or ''}"
+            self._raw_download_failures[filename] = cause
+            logger.warning(f"Failed to download {filename}: {cause}")
+            return
+
+        try:
 
             # Load and extract GPS
             _, exif = load_raw_image_with_exif(local_path)
