@@ -586,6 +586,43 @@ class CameraProjector:
         x = camera_point[0] / camera_point[2]
         y = camera_point[1] / camera_point[2]
 
+        pixel_x, pixel_y = self._distort_to_pixel(x, y, camera)
+        return pixel_x, pixel_y, img_w, img_h
+
+    def undistorted_to_raw(
+        self,
+        image_name: str,
+        u: float,
+        v: float,
+        undistorted_focal_px: float,
+    ) -> Optional[Tuple[float, float]]:
+        """
+        Map a pixel of ODM's undistorted texturing image back to the raw image.
+
+        mvs-texturing (and so the source-map) works on OpenSfM's undistorted
+        images: a pinhole camera centred in the frame, often down-sized (half or
+        quarter resolution, depending on the run). The NVM focal is in those
+        pixels, so its ratio to the raw focal gives the size; the raw pixel then
+        needs the Brown distortion re-applied.
+
+        Returns:
+            (pixel_x, pixel_y) in the raw image, or None if the image is unknown.
+        """
+        shot = self.shots.get(image_name) if self.available else None
+        camera = self.cameras.get(shot.get("camera")) if shot else None
+        if camera is None or not undistorted_focal_px or undistorted_focal_px <= 0:
+            return None
+        img_w, img_h = self._get_camera_dimensions(camera)
+        focal_x = camera.get("focal_x", camera.get("focal", 1.0))
+        scale = undistorted_focal_px / (focal_x * max(img_w, img_h))
+        x = (u - (img_w * scale - 1) / 2.0) / undistorted_focal_px
+        y = (v - (img_h * scale - 1) / 2.0) / undistorted_focal_px
+        return self._distort_to_pixel(x, y, camera)
+
+    def _distort_to_pixel(self, x: float, y: float, camera: dict) -> Tuple[float, float]:
+        """Normalized pinhole coordinates -> raw pixel (OpenSfM Brown model)."""
+        img_w, img_h = self._get_camera_dimensions(camera)
+
         # Apply camera intrinsics
         # OpenSfM brown camera model has focal_x, focal_y, c_x, c_y, k1, k2, p1, p2, k3
         focal_x = camera.get("focal_x", camera.get("focal", 1.0))
@@ -619,7 +656,7 @@ class CameraProjector:
         pixel_x = x_distorted * focal_x * max_size + (img_w - 1) / 2.0 + c_x * max_size
         pixel_y = y_distorted * focal_y * max_size + (img_h - 1) / 2.0 + c_y * max_size
 
-        return pixel_x, pixel_y, img_w, img_h
+        return pixel_x, pixel_y
 
     def _get_camera_dimensions(self, camera: dict) -> Tuple[int, int]:
         """Return image width/height for a camera model, with fallbacks."""

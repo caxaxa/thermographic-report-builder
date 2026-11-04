@@ -422,14 +422,26 @@ class ThermalAnnotator:
                         f"{min_distance_t}px (thermal)"
                     )
 
-            hot_allowed_mask = panel_mask
+            # Hot search stays a few pixels inside the projected module: the box
+            # is only as good as the projection, and the soil just outside it
+            # often runs hotter than any cell (seen ~9 % past the module edge).
+            hot_panel_mask = panel_mask
+            if panel_bbox_visual is not None:
+                inset_x = max(1, int(round((right_t - left_t) * 0.10)))
+                inset_y = max(1, int(round((bottom_t - top_t) * 0.10)))
+                inset_mask = np.zeros_like(panel_mask)
+                inset_mask[top_t + inset_y:bottom_t - inset_y, left_t + inset_x:right_t - inset_x] = True
+                if inset_mask.any():
+                    hot_panel_mask = inset_mask
+
+            hot_allowed_mask = hot_panel_mask
             if hot_exclusion_mask is not None:
-                hot_allowed_mask = panel_mask & ~hot_exclusion_mask
+                hot_allowed_mask = hot_panel_mask & ~hot_exclusion_mask
                 if not hot_allowed_mask.any():
                     logger.warning(
                         "Hot exclusion removed all candidates; ignoring exclusions for this defect"
                     )
-                    hot_allowed_mask = panel_mask
+                    hot_allowed_mask = hot_panel_mask
 
             # --- Find HOTTEST point: search in radius around initial point (DEFECT center), within panel ---
             # Create distance grid from initial point (the individual defect center, NOT panel center)

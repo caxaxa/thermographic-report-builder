@@ -383,3 +383,50 @@ class TestLoadReconstruction:
 
         result = load_reconstruction(path)
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# undistorted_to_raw (source-map pixels -> raw pixels)
+# ---------------------------------------------------------------------------
+
+BROWN_M30T = {
+    "projection_type": "brown", "width": 1280, "height": 1024,
+    "focal_x": 1.0154827460028855, "focal_y": 1.0154827460028855,
+    "c_x": -0.012063203232381681, "c_y": -0.016623354907812075,
+    "k1": -0.2144118934947942, "k2": 0.00912261773636338,
+    "p1": -0.00036915578974381713, "p2": -0.00047783305169116376, "k3": 0.013911396009838704,
+}
+
+
+class TestUndistortedToRaw:
+    """The source-map stores pixels of ODM's undistorted, often down-sized texturing image."""
+
+    @pytest.fixture
+    def projector(self):
+        from thermographic_report_builder.processing.camera_projector import CameraProjector
+        recon = _make_reconstruction(
+            cameras={"m30t": BROWN_M30T},
+            shots={"img.JPG": {"camera": "m30t", "rotation": [0, 0, 0], "translation": [0, 0, 0]}},
+        )
+        return CameraProjector(recon, _make_mock_geo_converter())
+
+    @pytest.mark.parametrize("scale", [1.0, 0.5, 0.25])
+    @pytest.mark.parametrize("xy", [(0.0, 0.0), (0.3, -0.2), (-0.45, 0.35)])
+    def test_matches_direct_projection(self, projector, scale, xy):
+        x, y = xy
+        f_u = BROWN_M30T["focal_x"] * 1280 * scale          # NVM focal, in texturing pixels
+        u = x * f_u + (1280 * scale - 1) / 2.0
+        v = y * f_u + (1024 * scale - 1) / 2.0
+        want = projector._project_to_camera(np.array([x, y, 1.0]), projector.shots["img.JPG"])
+        got = projector.undistorted_to_raw("img.JPG", u, v, f_u)
+        assert got == pytest.approx(want[:2], abs=1e-6)
+
+    def test_half_res_pixel_is_not_a_raw_pixel(self, projector):
+        # Area 29 (01KQAN0N...): reading half-res source-map pixels as raw put markers a table away.
+        f_u = BROWN_M30T["focal_x"] * 1280 * 0.5
+        raw = projector.undistorted_to_raw("img.JPG", 544.6, 222.7, f_u)
+        assert raw[0] > 1000 and raw[1] > 400
+
+    def test_unknown_image_or_focal(self, projector):
+        assert projector.undistorted_to_raw("nope.JPG", 1, 1, 650.0) is None
+        assert projector.undistorted_to_raw("img.JPG", 1, 1, 0) is None

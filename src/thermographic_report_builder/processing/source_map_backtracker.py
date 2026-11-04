@@ -30,6 +30,9 @@ class SourceMapResult:
     raw_pixel_x: float  # X coordinate in raw image (sub-pixel precision)
     raw_pixel_y: float  # Y coordinate in raw image (sub-pixel precision)
     image_name: Optional[str] = None  # Resolved image name
+    # NVM focal (px) of the undistorted texturing image the raw_pixel_* refer to;
+    # see CameraProjector.undistorted_to_raw.
+    undistorted_focal_px: Optional[float] = None
 
 
 class SourceMapBacktracker:
@@ -69,6 +72,7 @@ class SourceMapBacktracker:
         self.height = 0
         self.stride = 1  # Default stride (full resolution)
         self.view_id_to_name: Dict[int, str] = {}
+        self.view_id_to_focal: Dict[int, float] = {}
 
         if not source_map_path.exists():
             logger.warning(f"Source map not found: {source_map_path}")
@@ -149,6 +153,8 @@ class SourceMapBacktracker:
                 image_name = image_name[:-4]
 
             view_map[view_idx] = image_name
+            if len(parts) > 1:
+                self.view_id_to_focal[view_idx] = float(parts[1])
 
         return view_map
 
@@ -213,6 +219,7 @@ class SourceMapBacktracker:
             raw_pixel_x=raw_x,
             raw_pixel_y=raw_y,
             image_name=image_name,
+            undistorted_focal_px=self.view_id_to_focal.get(view_id),
         )
 
     def backtrack_with_search(
@@ -329,6 +336,7 @@ class SourceMapBacktracker:
             raw_pixel_x=raw_x,
             raw_pixel_y=raw_y,
             image_name=image_name,
+            undistorted_focal_px=self.view_id_to_focal.get(best_view_id),
         )
 
     def get_coverage_stats(self) -> Dict[str, int]:

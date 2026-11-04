@@ -340,17 +340,20 @@ class GPSMatcher:
                                 )
                             if image_path and image_path.exists():
                                 resolved_name = image_path.name
+                                sm_x, sm_y = self._source_map_raw_pixel(source_map_result)
                                 match = DefectMatch(
                                     image_name=resolved_name,
                                     image_path=image_path,
                                     method="source_map",
-                                    pixel_x=float(source_map_result.raw_pixel_x),
-                                    pixel_y=float(source_map_result.raw_pixel_y),
+                                    pixel_x=sm_x,
+                                    pixel_y=sm_y,
                                 )
                                 self.stats["source_map_success"] += 1
                                 logger.info(
                                     f"Source-map match: ortho=({uncropped_x:.0f},{uncropped_y:.0f}) -> "
-                                    f"{resolved_name} at ({source_map_result.raw_pixel_x}, {source_map_result.raw_pixel_y})"
+                                    f"{resolved_name} at ({sm_x:.1f}, {sm_y:.1f}) "
+                                    f"[texturing px ({source_map_result.raw_pixel_x:.1f}, "
+                                    f"{source_map_result.raw_pixel_y:.1f})]"
                                 )
                             else:
                                 logger.warning(f"Source-map image not found: {source_map_result.image_name}")
@@ -564,7 +567,14 @@ class GPSMatcher:
                             # SKIP when geometry is untrusted: the start point is metres
                             # off, so "hottest pixel nearby" locks onto sun-baked soil and
                             # collapses several defects in one frame onto the same pixel.
-                            should_refine = match.method != "mesh" and not self._untrusted_geometry
+                            # SKIP for source-map: it is pixel-accurate once converted
+                            # (_source_map_raw_pixel), and this search is not limited to
+                            # the module, so at a module edge it walks onto hot soil. The
+                            # panel-constrained hot search in the annotator still runs.
+                            should_refine = (
+                                match.method not in ("mesh", "source_map")
+                                and not self._untrusted_geometry
+                            )
                             if should_refine:
                                 try:
                                     from ..utils.thermal_alignment import ImageFormat
@@ -922,6 +932,33 @@ class GPSMatcher:
         )
 
         return matched_count, defect_matches
+
+    def _source_map_raw_pixel(self, result) -> Tuple[float, float]:
+        """Source-map pixel -> raw image pixel.
+
+        The source-map stores pixels of ODM's undistorted texturing image, which
+        is often down-sized (650 px focal on a 1300 px M30T frame = half size).
+        Read as raw pixels they land up to a whole table away from the defect.
+        """
+        if (
+            self.camera_projector is not None
+            and self.camera_projector.available
+            and result.undistorted_focal_px
+            and result.image_name
+        ):
+            raw = self.camera_projector.undistorted_to_raw(
+                result.image_name,
+                float(result.raw_pixel_x),
+                float(result.raw_pixel_y),
+                result.undistorted_focal_px,
+            )
+            if raw is not None:
+                return float(raw[0]), float(raw[1])
+        logger.warning(
+            f"Source-map pixel for {result.image_name} used unconverted "
+            f"(no camera model or NVM focal); it may be off-scale"
+        )
+        return float(result.raw_pixel_x), float(result.raw_pixel_y)
 
     def _thermal_zoom_px(self) -> int:
         """Zoom window for the thermal-analysis figure and its zoom-box overlay.
