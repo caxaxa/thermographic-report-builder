@@ -176,6 +176,8 @@ class TestMainPipelineE2E:
             patch("thermographic_report_builder.main.setup_logging"),
             patch("thermographic_report_builder.main.log_alignment_config"),
             patch("thermographic_report_builder.main.CropTransform", return_value=MagicMock(is_horizontal=False, is_double_tracker=False)),
+            patch("thermographic_report_builder.main.build_label_georeference", return_value=MagicMock(transform=mock_transform)),
+            patch("thermographic_report_builder.main.NorthUpView"),
             patch("subprocess.run") as mock_subprocess,
         ):
             # Configure settings mock

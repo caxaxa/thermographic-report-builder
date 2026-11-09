@@ -10,6 +10,7 @@ from .io import S3Client, load_defect_labels
 from .io.image_loader import load_orthophoto
 from .processing import DefectMapper, annotate_orthophoto, create_layer_image, crop_defect_regions, GPSMatcher, create_dxf_layers, CropTransform
 from .processing.camera_projector import CameraProjector
+from .processing.label_georef import NorthUpView, build_label_georeference
 from .report import ReportBuilder, export_metrics_json, export_metrics_csv, export_panel_grid_json
 from .models.report import ReportConfig
 from .models.job import JobOutput
@@ -299,13 +300,27 @@ def main() -> int:
             elif not crop_data:
                 logger.info("Crop transform disabled (no crop annotation)")
 
+        # Where the label pixels really are. The visualization ortho's own transform is wrong
+        # for a rotated crop, so panel coordinates, the DXF and the report maps use this.
+        # Hotspot back-mapping keeps using geo_converter + crop_transform.
+        label_georef = build_label_georeference(
+            viz_transform,
+            img_w,
+            img_h,
+            crop_data,
+            crop_transform=crop_transform,
+            original_transform=uncropped_transform if has_original_ortho else None,
+        )
+        label_geo_converter = PixelToLatLonConverter(label_georef.transform, viz_crs)
+        north_up = NorthUpView(label_georef, img_w, img_h)
+
         # ===== STEP 3: Map defects to panels =====
         logger.info("=" * 80)
         logger.info("STEP 3: Mapping defects to panel grid")
         logger.info("=" * 80)
 
         mapper = DefectMapper(
-            img_w, img_h, geo_converter,
+            img_w, img_h, label_geo_converter,
             is_horizontal=is_horizontal,
             is_double_tracker=is_double_tracker
         )
@@ -327,6 +342,8 @@ def main() -> int:
             panel_grid=panel_grid,
             output_path=images_dir / "ortho.png",
             scale_factor=settings.orthophoto_downscale_factor,
+            north_up=north_up,
+            north_up_path=images_dir / "ortho_north_up.png",
         )
 
         # ===== STEP 5: Create layer image (vector PDF) =====
@@ -339,6 +356,7 @@ def main() -> int:
             img_width=img_w,
             img_height=img_h,
             output_path=images_dir / "layer_img.pdf",
+            view=north_up,
         )
 
         # ===== STEP 5.5: Create DXF layers (georeferenced CAD file) =====
@@ -346,14 +364,11 @@ def main() -> int:
         logger.info("STEP 5.5: Creating DXF layers (CAD file)")
         logger.info("=" * 80)
 
-        # DXF needs geo_converter matching the panel_grid coordinate space (visualization ortho)
-        viz_geo_converter = PixelToLatLonConverter(viz_transform, viz_crs)
-
         dxf_path = work_dir / "layers.dxf"
         try:
             create_dxf_layers(
                 panel_grid=panel_grid,
-                geo_converter=viz_geo_converter,
+                geo_converter=label_geo_converter,
                 output_path=dxf_path,
                 area_name=settings.area_name,
             )
@@ -373,6 +388,7 @@ def main() -> int:
             output_dir=images_dir,
             layer_pdf_path=images_dir / "layer_img.pdf",
             scale_factor=settings.crop_downscale_factor,
+            view=north_up,
         )
 
         # ===== STEP 7: Match raw thermal images (reprojection or GPS fallback) =====
@@ -547,7 +563,7 @@ def main() -> int:
         report_location = settings.location
         if not report_location:
             try:
-                center_lat, center_lon = get_orthophoto_center(viz_transform, img_w, img_h, viz_crs)
+                center_lat, center_lon = get_orthophoto_center(label_georef.transform, img_w, img_h, viz_crs)
                 logger.info(f"Orthophoto center: ({center_lat:.6f}, {center_lon:.6f})")
                 report_location = reverse_geocode(center_lat, center_lon)
             except Exception as e:

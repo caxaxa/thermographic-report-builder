@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import copy
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 from reportlab.graphics.shapes import Drawing, Rect
 from reportlab.lib import colors
 from reportlab.graphics import renderPDF
@@ -13,6 +13,7 @@ from ..models.defect import Panel
 from ..io.image_loader import load_orthophoto, save_image
 from ..config import settings
 from ..utils.logger import get_logger
+from .label_georef import NorthUpView
 
 logger = get_logger(__name__)
 
@@ -23,6 +24,7 @@ def crop_defect_regions(
     output_dir: Path,
     layer_pdf_path: Path = None,
     scale_factor: float = 0.5,
+    view: Optional[NorthUpView] = None,
 ) -> None:
     """
     Crop regions around each defect for detailed views.
@@ -37,11 +39,16 @@ def crop_defect_regions(
         output_dir: Directory to save cropped images
         layer_pdf_path: Path to the annotated layer PDF (for creating mini-maps)
         scale_factor: Downscale factor for crops
+        view: View that turns a rotated crop back north-up
     """
     logger.info(f"Cropping defect regions with scale {scale_factor}")
 
     # Load orthophoto
     ortho_img, _, _, (img_h, img_w) = load_orthophoto(ortho_path)
+
+    # A rotated crop is cut and mapped north-up, on the canvas of the crop before rotation
+    rotated = view is not None and not view.is_identity
+    canvas_w, canvas_h = (view.width, view.height) if rotated else (img_w, img_h)
 
     # Color map for defect annotations (BGR format for OpenCV)
     color_map = {
@@ -67,12 +74,14 @@ def crop_defect_regions(
 
             # Calculate crop bounds (centered on panel)
             center_x, center_y = panel_bbox.center
+            if rotated:
+                center_x, center_y = view.point(center_x, center_y)
             half_size = crop_size_px // 2
 
             x1 = max(0, int(center_x - half_size))
             y1 = max(0, int(center_y - half_size))
-            x2 = min(img_w, int(center_x + half_size))
-            y2 = min(img_h, int(center_y + half_size))
+            x2 = min(canvas_w, int(center_x + half_size))
+            y2 = min(canvas_h, int(center_y + half_size))
 
             # Create annotated copy of orthophoto
             annotated_ortho = ortho_img.copy()
@@ -92,7 +101,12 @@ def crop_defect_regions(
                 cv2.drawContours(annotated_ortho, [contour], -1, color_map[defect_type], thickness=3)
 
             # Crop region from annotated image
-            cropped = annotated_ortho[y1:y2, x1:x2]
+            if not rotated:
+                cropped = annotated_ortho[y1:y2, x1:x2]
+            elif x2 > x1 and y2 > y1:
+                cropped = view.window(annotated_ortho, x1, y1, x2 - x1, y2 - y1)
+            else:
+                cropped = annotated_ortho[0:0, 0:0]
 
             # Skip if crop is empty (can happen at image edges)
             if cropped.size == 0 or cropped.shape[0] == 0 or cropped.shape[1] == 0:
@@ -117,7 +131,8 @@ def crop_defect_regions(
                 x1, y1, x2, y2,
                 panel.panel_id,
                 defect_type,
-                output_dir
+                output_dir,
+                view=view if rotated else None,
             )
 
     logger.info(f"Created {crop_count} defect crop images")
@@ -129,7 +144,8 @@ def _create_mini_map(
     x1: int, y1: int, x2: int, y2: int,
     panel_id: str,
     defect_type: str,
-    output_dir: Path
+    output_dir: Path,
+    view: Optional[NorthUpView] = None,
 ) -> None:
     """
     Create a mini-map PDF showing where the crop came from.
@@ -142,12 +158,16 @@ def _create_mini_map(
         panel_grid: Dictionary of all panels (for recreating layer)
         img_w: Image width
         img_h: Image height
-        x1, y1, x2, y2: Crop bounds
+        x1, y1, x2, y2: Crop bounds (north-up canvas pixels when `view` is given)
         panel_id: Panel identifier
         defect_type: Type of defect
         output_dir: Directory to save mini-map
+        view: North-up view of a rotated crop; panels are drawn through it
     """
     from reportlab.graphics.shapes import Polygon
+
+    if view is not None:
+        img_w, img_h = view.width, view.height
 
     # Scale to fit within A4 page dimensions (in points: 1 inch = 72 points)
     # A4 is 595 x 842 points, leave margins for LaTeX embedding
@@ -172,15 +192,22 @@ def _create_mini_map(
     # (Similar to what create_layer_image does)
     for panel in panel_grid.values():
         bbox = panel.bbox
-        # Transform from top-left to bottom-left origin and scale
-        x_draw = bbox.left * scale_factor
-        y_draw = (img_h - bbox.top - bbox.height) * scale_factor
-        w_draw = bbox.width * scale_factor
-        h_draw = bbox.height * scale_factor
+        if view is not None:
+            pts = []
+            for x, y in ((bbox.left, bbox.bottom), (bbox.right, bbox.bottom),
+                         (bbox.right, bbox.top), (bbox.left, bbox.top)):
+                dx, dy = view.point(x, y)
+                pts += [dx * scale_factor, (img_h - dy) * scale_factor]
+        else:
+            # Transform from top-left to bottom-left origin and scale
+            x_draw = bbox.left * scale_factor
+            y_draw = (img_h - bbox.top - bbox.height) * scale_factor
+            w_draw = bbox.width * scale_factor
+            h_draw = bbox.height * scale_factor
 
-        # Create polygon points for panel rectangle
-        pts = [x_draw, y_draw, x_draw + w_draw, y_draw,
-               x_draw + w_draw, y_draw + h_draw, x_draw, y_draw + h_draw]
+            # Create polygon points for panel rectangle
+            pts = [x_draw, y_draw, x_draw + w_draw, y_draw,
+                   x_draw + w_draw, y_draw + h_draw, x_draw, y_draw + h_draw]
 
         # Fill with red if panel has defects, otherwise no fill
         if panel.has_defects:

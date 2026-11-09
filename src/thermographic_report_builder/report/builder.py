@@ -501,6 +501,9 @@ RoyalBlue]
             # Use both width and height constraints with keepaspectratio to prevent overflow
             # Available text height after header/footer is approximately 0.65\textheight
             ortho_path = "report_images/ortho.png"
+            # A rotated crop also gets a north-up copy; ortho.png stays in label space for the web map
+            if (self.images_dir / "ortho_north_up.png").exists():
+                ortho_path = "report_images/ortho_north_up.png"
             with doc.create(pl.Figure(position="h!")) as fig:
                 # Constrain to 0.85 textwidth and 0.55 textheight, keeping aspect ratio
                 fig.append(NoEscape(

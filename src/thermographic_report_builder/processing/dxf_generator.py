@@ -7,6 +7,7 @@ Creates a DXF file with layers showing:
 - Panel ID annotations
 """
 
+import math
 import ezdxf
 from pathlib import Path
 from typing import Dict, Tuple
@@ -148,7 +149,7 @@ def _draw_panel(
     label_pos = _pixel_to_geo(center_x, center_y, geo_converter)
 
     # Calculate text height based on panel size (roughly 10% of panel width)
-    geo_width = abs(corners_geo[1][0] - corners_geo[0][0])
+    geo_width = math.dist(corners_geo[0], corners_geo[1])
     text_height = max(0.5, geo_width * 0.1)  # Minimum 0.5 units
 
     msp.add_text(
