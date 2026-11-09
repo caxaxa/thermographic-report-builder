@@ -753,12 +753,11 @@ class GPSMatcher:
                                         min(img_max_h, int(original_pixel_y + padding)),
                                     )
 
-                                # Use smaller search radius for source-map (already precise)
-                                # vs larger radius for GPS/reprojection (more drift)
-                                if match.method == "source_map":
-                                    hot_search_radius = 30  # Small radius, source-map is precise
-                                else:
-                                    hot_search_radius = 60  # Default for less precise methods
+                                # Source-map points land within ~2-4 thermal px of the labelled
+                                # hot cell (Area 29 reviewer corrections), so search only there and
+                                # ignore the panel box; GPS/reprojection drift more and stay inside it.
+                                precise_point = match.method == "source_map"
+                                hot_search_radius = 12 if precise_point else 60
 
                                 exclusion_key = (panel.panel_id, match.image_name)
                                 excluded_hot_points = hotspot_exclusions.get(exclusion_key)
@@ -776,6 +775,7 @@ class GPSMatcher:
                                     panel_bbox_visual=panel_bbox_visual,  # Constrain search to panel
                                     flight_direction=flight_dir,  # For image rotation
                                     hot_search_radius=hot_search_radius,  # Match refinement radius
+                                    hot_within_panel=not precise_point,
                                     excluded_hot_points=excluded_hot_points,
                                     min_hot_distance=10,
                                     # Untrusted geometry: show a wide frame-centred view

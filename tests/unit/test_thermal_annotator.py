@@ -279,6 +279,87 @@ class TestFindHotColdPoints:
         assert result is not None
         assert result.hot_temp == 90.0
 
+    def _edge_cell_scene(self):
+        """Module (280..360, 240..300) with a hot cell on its right edge and a warm interior patch."""
+        temp_array = np.full((512, 640), 30.0, dtype=np.float64)
+        temp_array[240:300, 280:360] = 40.0
+        temp_array[266:272, 352:358] = 50.0  # warm module edge around the hot cell
+        temp_array[268:270, 356:358] = 85.0  # hot cell, inside the 10 % inset margin
+        temp_array[262:266, 328:332] = 70.0  # warm interior patch 25 px away
+        return temp_array
+
+    def test_panel_search_drops_edge_hot_cell(self):
+        """Default (imprecise point): the inset keeps the hot search off the module edge."""
+        from thermographic_report_builder.utils.thermal_alignment import ImageFormat
+        annotator = ThermalAnnotator(thermal_extractor=self._make_extractor(self._edge_cell_scene()))
+        result = annotator.find_hot_cold_points(
+            image_path=Path("/fake.jpg"),
+            initial_x=354, initial_y=268,
+            panel_bbox_visual=(280, 240, 360, 300),
+            hot_search_radius=30,
+            image_format=ImageFormat.THERMAL_ONLY,
+            visual_size=(640, 512),
+        )
+        assert result is not None
+        assert result.hot_temp == 70.0
+
+    def test_precise_point_finds_edge_hot_cell(self):
+        """Source-map points: hottest pixel near the label, even on the module edge."""
+        from thermographic_report_builder.utils.thermal_alignment import ImageFormat
+        annotator = ThermalAnnotator(thermal_extractor=self._make_extractor(self._edge_cell_scene()))
+        result = annotator.find_hot_cold_points(
+            image_path=Path("/fake.jpg"),
+            initial_x=354, initial_y=268,
+            panel_bbox_visual=(280, 240, 360, 300),
+            hot_search_radius=6,
+            image_format=ImageFormat.THERMAL_ONLY,
+            visual_size=(640, 512),
+            hot_within_panel=False,
+        )
+        assert result is not None
+        assert (result.hot_x, result.hot_y, result.hot_temp) == (356, 268, 85.0)
+        # The cold reference still comes from the panel interior
+        assert result.cold_temp == 40.0
+
+    def test_precise_point_ignores_offset_panel_box(self):
+        """A panel box projected off the module must not pull the hot point to its edge."""
+        from thermographic_report_builder.utils.thermal_alignment import ImageFormat
+        temp_array = np.full((512, 640), 40.0, dtype=np.float64)
+        temp_array[200:202, 200:202] = 80.0  # labelled hot cell
+        annotator = ThermalAnnotator(thermal_extractor=self._make_extractor(temp_array))
+        result = annotator.find_hot_cold_points(
+            image_path=Path("/fake.jpg"),
+            initial_x=201, initial_y=201,
+            panel_bbox_visual=(210, 180, 250, 230),  # box 9 px right of the cell
+            hot_search_radius=6,
+            image_format=ImageFormat.THERMAL_ONLY,
+            visual_size=(640, 512),
+            hot_within_panel=False,
+        )
+        assert result is not None
+        assert result.hot_temp == 80.0
+
+    def test_precise_point_respects_prior_hot_points(self):
+        """A second defect on the same image must not reuse the first one's hot pixel."""
+        from thermographic_report_builder.utils.thermal_alignment import ImageFormat
+        temp_array = np.full((512, 640), 40.0, dtype=np.float64)
+        temp_array[200, 200] = 90.0  # first defect's hot cell
+        temp_array[200, 208] = 70.0  # second defect's cell
+        annotator = ThermalAnnotator(thermal_extractor=self._make_extractor(temp_array))
+        result = annotator.find_hot_cold_points(
+            image_path=Path("/fake.jpg"),
+            initial_x=205, initial_y=200,
+            panel_bbox_visual=(150, 150, 260, 260),
+            hot_search_radius=6,
+            image_format=ImageFormat.THERMAL_ONLY,
+            visual_size=(640, 512),
+            excluded_hot_points=[(200, 200)],
+            min_hot_distance=4,
+            hot_within_panel=False,
+        )
+        assert result is not None
+        assert (result.hot_x, result.hot_temp) == (208, 70.0)
+
 
 # ---------------------------------------------------------------------------
 # ThermalAnnotator.save_annotated_image

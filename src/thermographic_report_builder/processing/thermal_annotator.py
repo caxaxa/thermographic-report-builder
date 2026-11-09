@@ -232,6 +232,7 @@ class ThermalAnnotator:
         flight_direction: Optional[str] = None,
         excluded_hot_points: Optional[List[Tuple[int, int]]] = None,
         min_hot_distance: int = 10,
+        hot_within_panel: bool = True,
     ) -> Optional[HotColdPoints]:
         """
         Find hottest and coldest points WITHIN the panel bounding box.
@@ -254,6 +255,9 @@ class ThermalAnnotator:
             excluded_hot_points: Optional list of visual coords to avoid for hot selection.
                                 Already rotated if flight_direction is 'south'.
             min_hot_distance: Minimum separation from excluded hot points (visual pixels)
+            hot_within_panel: Keep the hot search inside the projected panel box. Pass False
+                              when the initial point itself is precise (source-map): the hot
+                              point is then the hottest pixel within hot_search_radius of it.
 
         Returns:
             HotColdPoints or None if detection fails
@@ -457,8 +461,16 @@ class ThermalAnnotator:
                 scale_x = 1.0
             hot_radius_t = int(hot_search_radius * scale_x)
 
-            # Inner search: small radius around defect center, within panel
-            inner_search_mask = (dist_from_defect <= hot_radius_t) & hot_allowed_mask
+            if hot_within_panel:
+                # Inner search: small radius around defect center, within panel
+                inner_search_mask = (dist_from_defect <= hot_radius_t) & hot_allowed_mask
+            else:
+                # Precise defect point: the labelled hot cell lies within a few pixels of it,
+                # often on the module edge the inset drops, and the projected panel box can
+                # sit several pixels off the module, so search around the point alone.
+                inner_search_mask = dist_from_defect <= hot_radius_t
+                if hot_exclusion_mask is not None:
+                    inner_search_mask &= ~hot_exclusion_mask
 
             # Create a "prefer near defect" mask - points closer to the DEFECT center (not panel center)
             # This ensures each defect on a panel finds its OWN hot point, not the panel's hottest overall
@@ -569,6 +581,7 @@ class ThermalAnnotator:
         excluded_hot_points: Optional[List[Tuple[int, int]]] = None,
         min_hot_distance: int = 10,
         center_on_defect: bool = False,
+        hot_within_panel: bool = True,
     ) -> Optional[AnnotatedThermalImage]:
         """
         Create an annotated thermal image centered on the defect with hot/cold markers.
@@ -599,6 +612,7 @@ class ThermalAnnotator:
                               Use larger values (60px) for less precise methods (GPS, reprojection).
             excluded_hot_points: Optional list of visual coords to avoid for hot selection.
             min_hot_distance: Minimum separation from excluded hot points (visual pixels).
+            hot_within_panel: Keep the hot search inside the panel box (see find_hot_cold_points).
 
         Returns:
             AnnotatedThermalImage or None if extraction fails
@@ -667,6 +681,7 @@ class ThermalAnnotator:
                 flight_direction=flight_direction,  # For thermal array rotation
                 excluded_hot_points=excluded_hot_points_rotated,
                 min_hot_distance=min_hot_distance,
+                hot_within_panel=hot_within_panel,
             )
 
             # REQUIRE hot_cold detection - no fallback, skip thermal analysis if it fails
