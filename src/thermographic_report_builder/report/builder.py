@@ -12,7 +12,7 @@ from pylatex.utils import NoEscape, bold, escape_latex
 from ..models.defect import Panel
 from ..models.report import ReportConfig
 from ..models.annotation_manifest import AnnotationManifest
-from .capacity import compute_capacity_summary
+from .capacity import SEVERITY_ORDER, compute_capacity_summary
 from ..config.constants import (
     get_capacity_text,
     DEFECT_COLORS,
@@ -661,13 +661,10 @@ RoyalBlue]
         # Severity distribution (when the annotation manifest carries dT)
         if summary.severity_counts:
             parts = []
-            for sev_key, label_key in (
-                ("CRITICAL", "severity_critical"),
-                ("ATTENTION", "severity_attention"),
-                ("MONITORING", "severity_monitoring"),
-            ):
+            for sev_key in SEVERITY_ORDER:
                 n = summary.severity_counts.get(sev_key)
                 if n:
+                    label_key = f"severity_{sev_key.lower()}" + ("" if n == 1 else "_plural")
                     parts.append(f"{n} {get_capacity_text(label_key, lang)}")
             breakdown = ", ".join(parts) if parts else "—"
             max_dt = f"{summary.max_delta_t:.1f}" if summary.max_delta_t is not None else "—"
@@ -709,12 +706,18 @@ RoyalBlue]
                     tabular.append(NoEscape(r"\midrule"))
                     for item in summary.priority_list:
                         dt = f"{item.delta_t:.1f}" if item.delta_t is not None else "—"
+                        # Same labels as the per-defect tables; no class without a trusted ΔT
+                        severity_label = (
+                            get_thermal_legend_text(f"severity_{item.severity.lower()}", lang)
+                            if item.severity in SEVERITY_ORDER
+                            else "—"
+                        )
                         tabular.add_row(
                             [
                                 item.panel_id,
                                 defect_labels.get(item.defect_type, item.defect_type),
                                 dt,
-                                item.severity.capitalize(),
+                                severity_label,
                             ]
                         )
                     tabular.append(NoEscape(r"\bottomrule"))

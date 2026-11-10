@@ -16,9 +16,12 @@ from thermographic_report_builder.models.defect import (
     GeospatialCoordinate,
     Panel,
 )
+from thermographic_report_builder.config.constants import get_capacity_text, get_thermal_legend_text
+from thermographic_report_builder.processing.thermal_annotator import HotColdPoints
 from thermographic_report_builder.report.capacity import (
     DEFAULT_MODULE_WP,
     PRIORITY_LIST_LIMIT,
+    SEVERITY_ORDER,
     compute_capacity_summary,
 )
 
@@ -92,10 +95,13 @@ class TestCapacitySummary:
             user_id="u1",
             generated_at="2026-08-28T00:00:00Z",
             annotations=[
-                _entry("1-1", "hotspots", 12.0, "MONITORING"),
+                _entry("1-1", "hotspots", 12.0, "MEDIUM"),
                 _entry("1-2", "hotspots", 55.0, "CRITICAL"),
-                _entry("2-1", "hotspots", 30.0, "ATTENTION"),
+                _entry("2-1", "hotspots", 25.0, "HIGH"),
+                _entry("2-2", "hotspots", None, "UNKNOWN"),
                 _entry("1-1", "hotspots", 80.0, "CRITICAL"),
+                _entry("2-3", "hotspots", 3.0, "MINIMAL"),
+                _entry("1-2", "hotspots", 7.0, "LOW"),
             ]
         )
         s = compute_capacity_summary(_grid(), manifest)
@@ -103,11 +109,30 @@ class TestCapacitySummary:
         assert ids == [
             ("CRITICAL", 80.0),
             ("CRITICAL", 55.0),
-            ("ATTENTION", 30.0),
-            ("MONITORING", 12.0),
+            ("HIGH", 25.0),
+            ("MEDIUM", 12.0),
+            ("LOW", 7.0),
+            ("MINIMAL", 3.0),
+            ("UNKNOWN", None),  # no trusted ΔT: last
         ]
-        assert s.severity_counts == {"CRITICAL": 2, "ATTENTION": 1, "MONITORING": 1}
+        assert s.severity_counts == {
+            "CRITICAL": 2, "HIGH": 1, "MEDIUM": 1, "LOW": 1, "MINIMAL": 1, "UNKNOWN": 1,
+        }
         assert s.max_delta_t == 80.0
+
+    def test_every_annotator_severity_is_ranked_and_labelled(self):
+        """The section must know every class the annotator assigns (it once listed only CRITICAL)."""
+        classes = [
+            HotColdPoints(hot_x=0, hot_y=0, hot_temp=40.0 + dt, cold_x=0, cold_y=0, cold_temp=40.0, delta_t=dt).severity
+            for dt in (35.0, 25.0, 15.0, 7.0, 2.0)
+        ]
+        assert classes == list(SEVERITY_ORDER)
+        for lang in ("pt-BR", "en-US"):
+            for sev in classes:
+                key = f"severity_{sev.lower()}"
+                assert get_capacity_text(key, lang) != key
+                assert get_capacity_text(f"{key}_plural", lang) != f"{key}_plural"
+                assert get_thermal_legend_text(key, lang) != key
 
     def test_priority_capped(self):
         manifest = AnnotationManifest(
@@ -115,7 +140,7 @@ class TestCapacitySummary:
             user_id="u1",
             generated_at="2026-08-28T00:00:00Z",
             annotations=[
-                _entry(f"1-{i}", "hotspots", float(i), "MONITORING") for i in range(40)
+                _entry(f"1-{i}", "hotspots", float(i), "MEDIUM") for i in range(40)
             ]
         )
         s = compute_capacity_summary(_grid(), manifest)

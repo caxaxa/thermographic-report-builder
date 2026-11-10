@@ -55,7 +55,7 @@ class AnnotationEntry(BaseModel):
         ),
     )
     severity: str = Field(
-        description="Severity classification (CRITICAL, ATTENTION, MONITORING, UNKNOWN)"
+        description="Severity classification (CRITICAL, HIGH, MEDIUM, LOW, MINIMAL; UNKNOWN without a trusted ΔT)"
     )
     flight_direction: Optional[str] = Field(
         default=None,

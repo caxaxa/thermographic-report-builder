@@ -20,8 +20,9 @@ from ..models.defect import Panel
 # Printed as an explicit assumption; the only parameter in the section.
 DEFAULT_MODULE_WP = 550
 
-# Manifest severity taxonomy, most urgent first.
-SEVERITY_ORDER = {"CRITICAL": 0, "ATTENTION": 1, "MONITORING": 2}
+# Manifest severity taxonomy (HotColdPoints.severity), most urgent first.
+# Entries without a trusted ΔT carry "UNKNOWN" and rank last.
+SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "MINIMAL": 4}
 
 # Cap for the priority worklist table (full detail lives in the per-defect
 # sections that follow).
@@ -94,7 +95,7 @@ def compute_capacity_summary(
     priority: List[PriorityItem] = []
     if annotation_manifest and annotation_manifest.annotations:
         for a in annotation_manifest.annotations:
-            sev = (a.severity or "MONITORING").upper()
+            sev = (a.severity or "UNKNOWN").upper()
             severity_counts[sev] = severity_counts.get(sev, 0) + 1
             if a.delta_t is not None:
                 max_dt = a.delta_t if max_dt is None else max(max_dt, a.delta_t)
