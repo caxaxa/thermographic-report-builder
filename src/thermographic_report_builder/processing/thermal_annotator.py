@@ -4,7 +4,7 @@ This module generates professional annotated thermal images that show:
 - Zoomed view of the defect area in the raw thermal image
 - Temperature colorbar overlay (matching detected palette)
 - RED marker on hottest point (detected hotspot)
-- BLUE marker on coolest reference point (in outer ring)
+- BLUE marker on the reference point (healthy module surface next to the hotspot)
 - Temperature readings for both points and delta T
 """
 
@@ -174,9 +174,9 @@ class HotColdPoints:
     hot_x: int  # X coordinate of hottest point (visual coords)
     hot_y: int  # Y coordinate of hottest point (visual coords)
     hot_temp: float  # Temperature at hottest point
-    cold_x: int  # X coordinate of coldest reference point (visual coords)
-    cold_y: int  # Y coordinate of coldest reference point (visual coords)
-    cold_temp: float  # Temperature at coldest reference point
+    cold_x: int  # X coordinate of reference point on the module surface (visual coords)
+    cold_y: int  # Y coordinate of reference point on the module surface (visual coords)
+    cold_temp: float  # Module surface temperature at the reference point
     delta_t: float  # Temperature difference (hot - cold)
 
     @property
@@ -200,10 +200,121 @@ class AnnotatedThermalImage:
 
     image: np.ndarray  # The annotated BGR image
     defect_temp: float  # Defect temperature in Celsius
-    panel_avg_temp: float  # Panel average temperature in Celsius (now coolest reference)
+    panel_avg_temp: float  # Reference temperature in Celsius (module surface next to the defect)
     delta_t: float  # Temperature difference
     severity: str  # Severity classification
     hot_cold: Optional[HotColdPoints] = None  # Hot/cold point details if detected
+
+
+# Reference point search (the "cold" point of each defect), see find_module_reference_point().
+# Distances are thermal pixels, temperatures °C; tuned against reviewer-placed reference points.
+_REF_MAX_MODULE_SCALE = 80.0  # per 640 px of frame width; a larger box is not a single module
+_REF_MIN_HOT_GAP = 4  # keeps the marker's 5x5 window off the hot point
+_REF_CLEAR_HOT_GAP = 16  # keeps the two markers apart in the report image (51 px rings, 3.4 px per thermal pixel)
+_REF_LEVEL_TOL = 0.05  # marker pixel must be at the surface level
+_REF_FLATNESS_SLACK = 0.55  # 5x5 spread allowed above the flattest candidate (0.5 + half a 0.1 step)
+_REF_MAX_DIP = 2.0  # deeper dip on the way to the hot point = gap between modules
+_REF_PATH_CANDIDATES = 64  # nearest clear candidates checked for a gap-free path
+
+
+def _shorth_midpoint(values: np.ndarray) -> float:
+    """Median of the shortest interval holding half of the values (densest part of the distribution)."""
+    v = np.sort(np.asarray(values, dtype=np.float64))
+    n = v.size
+    if n < 4:
+        return float(np.median(v))
+    k = max(2, int(np.ceil(n * 0.5)))
+    start = int(np.argmin(v[k - 1:] - v[:n - k + 1]))
+    return float(np.median(v[start:start + k]))
+
+
+def find_module_reference_point(
+    temp_array: np.ndarray,
+    panel_mask: np.ndarray,
+    hot_x: int,
+    hot_y: int,
+) -> Optional[Tuple[int, int, float]]:
+    """
+    Find the reference point for a hot spot: healthy module surface next to it.
+
+    The coldest pixel of the panel box is not a usable reference: it sits on the gap
+    between modules, a shadow or the ground, and inflates ΔT. Instead:
+
+    1. Region: panel pixels within one module scale (sqrt of the panel area) of the hot
+       point, plus everything within half a module scale of it. The second term keeps the
+       region on the hot module when the projected box is a few pixels off; the scale is
+       capped so an oversized box degrades to a disc around the hot point.
+    2. Level: midpoint of the shortest interval holding half of the region's temperatures.
+       That is the module surface; hot cells, gaps, shadow and ground fall in the tails.
+    3. Marker: a pixel at that level on a flat 5x5 patch, preferring one with no cold gap on
+       the straight line to the hot point (same module). Among those, the nearest one that
+       leaves room for both markers in the report image; on a module too small for that,
+       the farthest one.
+
+    The returned temperature is the minimum of the 5x5 window at the marker, which is what
+    create_annotated_image_with_points() reads at a cold point, so re-reading the marker
+    through the override path gives the same value.
+
+    Args:
+        temp_array: Temperatures in Celsius (already rotated for south-facing flights)
+        panel_mask: Boolean mask of the panel box in the same frame
+        hot_x: X coordinate of the hot point (thermal pixels)
+        hot_y: Y coordinate of the hot point (thermal pixels)
+
+    Returns:
+        (x, y, temperature) of the reference point in thermal pixels, or None if there is
+        no valid temperature around the hot point
+    """
+    temps = np.asarray(temp_array, dtype=np.float64)
+    temps = np.where(np.isfinite(temps), temps, np.inf)  # invalid pixels never win a minimum
+    height, width = temps.shape
+    y_coords, x_coords = np.ogrid[:height, :width]
+    dist_from_hot = np.hypot(x_coords - hot_x, y_coords - hot_y)
+
+    module_scale = min(float(np.sqrt(panel_mask.sum())), _REF_MAX_MODULE_SCALE * width / 640.0)
+    region = (panel_mask & (dist_from_hot <= max(8.0, module_scale))) | (
+        dist_from_hot <= max(4.0, 0.5 * module_scale)
+    )
+    region &= np.isfinite(temps)
+    if not region.any():
+        return None
+
+    ys, xs = np.nonzero(region)
+    region_temps = temps[ys, xs]
+    distance = dist_from_hot[ys, xs]
+    level = _shorth_midpoint(region_temps)
+
+    # Candidates: pixels at the surface level, clear of the hot point when possible
+    deviation = np.abs(region_temps - level)
+    at_level = deviation <= max(_REF_LEVEL_TOL, float(deviation.min())) + 1e-6
+    clear_of_hot = at_level & (distance >= _REF_MIN_HOT_GAP)
+    candidates = np.nonzero(clear_of_hot if clear_of_hot.any() else at_level)[0]
+
+    # Keep the flat 5x5 patches (window minimum close to the level)
+    kernel = np.ones((5, 5), np.uint8)
+    with np.errstate(invalid="ignore"):  # inf - inf where a whole window is invalid, never at a candidate
+        spread = cv2.dilate(temps, kernel) - cv2.erode(temps, kernel)
+    spread = spread[ys[candidates], xs[candidates]]
+    candidates = candidates[spread <= float(spread.min()) + _REF_FLATNESS_SLACK]
+    candidates = candidates[np.argsort(distance[candidates], kind="stable")]
+
+    # Order: clear of the hot marker, nearest first; then the closer ones, farthest first
+    clear = distance[candidates] >= _REF_CLEAR_HOT_GAP
+    candidates = np.concatenate((candidates[clear][:_REF_PATH_CANDIDATES], candidates[~clear][::-1]))
+
+    # Prefer a marker on the same module: no cold gap on the straight line from the hot point
+    best = candidates[0]
+    for candidate in candidates:
+        steps = int(max(abs(xs[candidate] - hot_x), abs(ys[candidate] - hot_y))) + 1
+        line_x = np.rint(np.linspace(hot_x, xs[candidate], steps)).astype(int)
+        line_y = np.rint(np.linspace(hot_y, ys[candidate], steps)).astype(int)
+        if level - float(temps[line_y, line_x].min()) <= _REF_MAX_DIP:
+            best = candidate
+            break
+
+    ref_x, ref_y = int(xs[best]), int(ys[best])
+    window = temps[max(0, ref_y - 2):min(height, ref_y + 3), max(0, ref_x - 2):min(width, ref_x + 3)]
+    return ref_x, ref_y, float(np.min(window))
 
 
 class ThermalAnnotator:
@@ -225,7 +336,6 @@ class ThermalAnnotator:
         initial_x: int,
         initial_y: int,
         panel_bbox_visual: Optional[Tuple[int, int, int, int]] = None,
-        edge_margin: int = 50,
         hot_search_radius: int = 60,
         image_format=None,
         visual_size: Optional[Tuple[int, int]] = None,
@@ -235,12 +345,13 @@ class ThermalAnnotator:
         hot_within_panel: bool = True,
     ) -> Optional[HotColdPoints]:
         """
-        Find hottest and coldest points WITHIN the panel bounding box.
+        Find the hot point of a defect and its reference point on the module surface.
 
         The algorithm:
         1. Search for HOTTEST pixel in a small radius around initial point, constrained to panel
         2. Prefer hot points closer to panel center over edge hot points
-        3. Find COLDEST pixel within the panel, excluding edge pixels (to avoid shadows)
+        3. Find the REFERENCE point: healthy module surface next to the hot point
+           (see find_module_reference_point), reported as the cold point
 
         Args:
             image_path: Path to DJI thermal R-JPEG image
@@ -249,7 +360,6 @@ class ThermalAnnotator:
             panel_bbox_visual: Optional (left, top, right, bottom) in visual coords (1280x1024).
                               If provided, search is constrained to within this panel.
                               Already rotated if flight_direction is 'south'.
-            edge_margin: Pixels to exclude from edges when searching for cold point (visual coords)
             hot_search_radius: Radius around initial point to search for hottest pixel (visual coords)
             flight_direction: 'south' if drone was flying south (thermal array needs 180° rotation)
             excluded_hot_points: Optional list of visual coords to avoid for hot selection.
@@ -328,57 +438,13 @@ class ThermalAnnotator:
                 panel_center_x = (left_t + right_t) / 2
                 panel_center_y = (top_t + bottom_t) / 2
 
-                # Create eroded mask for cold point search (exclude edges to avoid shadows)
-                # Use percentage-based erosion: exclude outer 30% from each edge
-                panel_width_t = right_t - left_t
-                panel_height_t = bottom_t - top_t
-
-                # Take the larger of: fixed margin OR 30% of panel dimension
-                if image_format == ImageFormat.VISUAL_THERMAL and visual_size:
-                    scale_x = thermal_size[0] / visual_size[0]
-                else:
-                    scale_x = 1.0
-                edge_margin_t = int(edge_margin * scale_x)
-                margin_x = max(edge_margin_t, int(panel_width_t * 0.30))
-                margin_y = max(edge_margin_t, int(panel_height_t * 0.30))
-
-                inner_left = left_t + margin_x
-                inner_top = top_t + margin_y
-                inner_right = right_t - margin_x
-                inner_bottom = bottom_t - margin_y
-
-                # Ensure inner region is valid (at least 20% of panel remains)
-                if inner_left < inner_right and inner_top < inner_bottom:
-                    panel_mask_eroded = np.zeros((height, width), dtype=bool)
-                    panel_mask_eroded[inner_top:inner_bottom, inner_left:inner_right] = True
-                    logger.debug(
-                        f"Cold search area: ({inner_left}, {inner_top}) to ({inner_right}, {inner_bottom}) "
-                        f"[margins: x={margin_x}, y={margin_y}]"
-                    )
-                else:
-                    # Panel too small after erosion, use center 40% of panel
-                    center_x = (left_t + right_t) // 2
-                    center_y = (top_t + bottom_t) // 2
-                    half_w = max(1, panel_width_t // 5)  # 40% width
-                    half_h = max(1, panel_height_t // 5)  # 40% height
-                    panel_mask_eroded = np.zeros((height, width), dtype=bool)
-                    panel_mask_eroded[
-                        center_y - half_h : center_y + half_h,
-                        center_x - half_w : center_x + half_w
-                    ] = True
-                    logger.debug(f"Using center 40% of panel for cold search")
-
-                logger.debug(
-                    f"Panel bbox thermal: ({left_t}, {top_t}) to ({right_t}, {bottom_t}), "
-                    f"eroded margin: {edge_margin_t}px"
-                )
+                logger.debug(f"Panel bbox thermal: ({left_t}, {top_t}) to ({right_t}, {bottom_t})")
             else:
                 # No panel bbox - fallback to old behavior (search around initial point)
                 logger.warning("No panel bbox provided, using fallback circular search")
                 y_coords, x_coords = np.ogrid[:height, :width]
                 distances = np.sqrt((x_coords - thermal_init_x) ** 2 + (y_coords - thermal_init_y) ** 2)
                 panel_mask = distances <= 50  # 50 thermal pixels radius
-                panel_mask_eroded = distances <= 40
                 panel_center_x = thermal_init_x
                 panel_center_y = thermal_init_y
                 left_t, top_t, right_t, bottom_t = 0, 0, width, height
@@ -510,16 +576,14 @@ class ThermalAnnotator:
                 hot_temp = float(temp_array[hot_thermal_y, hot_thermal_x])
                 logger.debug(f"Found hot point in panel fallback: {hot_temp:.1f}°C")
 
-            # --- Find COLDEST point within panel (excluding edges) ---
-            if panel_mask_eroded.any():
-                cold_temps = np.where(panel_mask_eroded, temp_array, np.inf)
-            else:
-                # Fallback to full panel if eroded mask is empty
-                cold_temps = np.where(panel_mask, temp_array, np.inf)
-
-            cold_idx = np.unravel_index(np.argmin(cold_temps), cold_temps.shape)
-            cold_thermal_y, cold_thermal_x = cold_idx
-            cold_temp = float(temp_array[cold_thermal_y, cold_thermal_x])
+            # --- Find REFERENCE point: module surface next to the hot point ---
+            reference = find_module_reference_point(
+                temp_array, panel_mask, hot_thermal_x, hot_thermal_y
+            )
+            if reference is None:
+                logger.warning("No valid temperatures around the hot point, cannot find reference point")
+                return None
+            cold_thermal_x, cold_thermal_y, cold_temp = reference
 
             # Convert back to visual coordinates (with alignment correction reversed)
             hot_visual_x, hot_visual_y = thermal_to_visual(
@@ -588,7 +652,7 @@ class ThermalAnnotator:
 
         Uses hot/cold point detection to find:
         - RED marker: Hottest point WITHIN the panel
-        - BLUE marker: Coldest reference point WITHIN the panel (excluding edges)
+        - BLUE marker: Reference point on the module surface next to the hot point
 
         Args:
             raw_image_path: Path to the raw thermal image (DJI R-JPEG)
@@ -674,7 +738,6 @@ class ThermalAnnotator:
                 initial_x=int(defect_pixel_x),
                 initial_y=int(defect_pixel_y),
                 panel_bbox_visual=panel_bbox_visual,
-                edge_margin=50,  # Exclude 50 visual pixels from edges for cold search (avoid shadows)
                 hot_search_radius=hot_search_radius,  # Use caller-specified radius
                 image_format=image_format,
                 visual_size=visual_size,

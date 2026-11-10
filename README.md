@@ -368,7 +368,7 @@ This ordering applies to both the summary table and the detailed sections.
 | Images not rotated correctly | Flight path not purely north/south | The rotation algorithm assumes linear north/south flight paths; complex flight patterns may need manual review |
 | All images rotated same direction | Single-direction flight | This is expected behavior for a single-pass flight; the algorithm correctly detects consistent flight direction |
 | Hot marker on vegetation instead of panel | Panel bbox includes surrounding vegetation | Known limitation - see Hot Point Detection section below |
-| Blue cross (cold point) missing | Cold point coordinates invalid or off-image | Check logs for cold point calculation errors |
+| Blue cross (reference point) missing | Reference point outside the zoomed crop around the hot point | Check the `Hot/cold detection` log line for the reference (COLD) coordinates |
 | Source-map backtracking fails | Source-map not generated or corrupted | Re-run ODM processing with patched image to regenerate `odm_orthophoto_sources.tif` |
 | Defect coordinates outside panel bbox | Coordinate transform chain mismatch | Enable DEBUG logging to trace coordinate transformations |
 | Figures overflow page boundaries | Very tall orthophoto (aspect ratio > 1.5) | Fixed in Jan 2026 - figures now use `keepaspectratio` with height constraints |
@@ -380,14 +380,14 @@ This ordering applies to both the summary table and the detailed sections.
 
 ## Hot Point Detection Algorithm
 
-The thermal annotator identifies the hottest and coldest points within each panel for temperature delta calculations.
+The thermal annotator identifies the hot point of each defect and a reference point on the healthy module surface next to it; ΔT is the difference between the two.
 
 ### Algorithm Overview
 
 1. **Panel Bbox Projection**: Panel corners from the orthophoto are projected onto the raw thermal image using camera parameters from `reconstruction.json`
 2. **Visual-to-Thermal Coordinate Mapping**: Coordinates are converted from visual (1280x1024) to thermal (640x512) space with alignment offset
 3. **Hot Point Search**: Find the hottest pixel within a search radius around the defect center, constrained to the panel bbox
-4. **Cold Point Search**: Find the coldest pixel within the panel interior (excluding edges to avoid shadow artifacts)
+4. **Reference (Cold) Point Search**: Find the module surface next to the hot point: the most common temperature level around it, read on a flat 5x5 patch of the same module, set apart from the hot point so the two markers do not overlap. The coldest pixel of the panel box is not used: it lands on gaps between modules, shadow or ground and inflates ΔT (`find_module_reference_point`)
 5. **Temperature Extraction**: Use DJI thermal SDK to read actual temperature values from the R-JPEG thermal data
 
 ### Known Limitations

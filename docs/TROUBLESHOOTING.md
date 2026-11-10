@@ -101,9 +101,8 @@ gdalinfo odm_orthophoto_sources.tif
 **Symptom:** Annotated thermal image shows red hot marker but no blue cold marker.
 
 **Causes:**
-1. Cold point coordinates are outside image bounds
-2. Panel bbox is too small after erosion (cold search excludes edges)
-3. Cold point drawing failed silently
+1. Reference (cold) point is outside the zoomed crop around the hot point. Rare: it is searched on the module surface within one module of the hot point
+2. Cold point drawing failed silently
 
 **Diagnosis:** Check logs for cold point coordinates:
 ```
@@ -248,7 +247,7 @@ aws s3 sync s3://solar-reports-prod/<USER>/<PROJECT>/tex_bundle/report_images/ .
 ### What to Look For
 
 1. **Hot marker position**: Should be on the hottest visible defect
-2. **Cold marker position**: Should be in the panel interior (not on edges)
+2. **Cold (reference) marker position**: Should be on the healthy surface of the same module, next to the hot marker (not on a gap, shadow or the ground)
 3. **Image rotation**: North should be at top
 4. **Panel bbox**: Should encompass the panel without too much surrounding area
 
