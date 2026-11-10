@@ -1,8 +1,10 @@
-"""Label-space georeference: inference's TIF transform is wrong for a rotated crop.
+"""Label-space georeference of a rotated crop.
 
 The fixture replays what inference does (crop, PIL rotate with expand, resample to
-1.6 cm, transform scaled but never rotated) on an image with markers at known ground
-positions, then checks the rebuilt georeference puts every marker back where it is.
+1.6 cm) on an image with markers at known ground positions. Inference used to scale the
+transform it wrote but never rotate it, which is wrong for a rotated crop; the tests check
+the rebuilt georeference puts every marker back where it is, and that a file whose
+transform does carry the rotation is used as it is.
 """
 
 import math
@@ -44,18 +46,30 @@ def _crop_annotation(deg):
     return {"polygon": polygon, "rotationLine": _rotation_line(deg) if deg else None}
 
 
-def _run_inference(deg):
-    """Crop, rotate and resample a marker image the way inference does."""
+def _run_inference(deg, rotation_in_transform=False):
+    """Crop, rotate and resample a marker image the way inference does.
+
+    The transform is the one inference used to write, without the rotation, unless
+    rotation_in_transform asks for the one it writes now.
+    """
     x0, y0, x1, y1 = CROP
     img = np.full((y1 - y0, x1 - x0), 100, np.uint8)
     for mx, my in MARKERS:
         img[my - y0 - 1 : my - y0 + 2, mx - x0 - 1 : mx - x0 + 2] = 255
     rotated = Image.fromarray(img)
+    transform = ORIGINAL * Affine.translation(x0, y0)
     if abs(deg) > 0.1:
         rotated = rotated.rotate(deg, expand=True, resample=Image.BILINEAR)
+        if rotation_in_transform:
+            transform = (
+                transform
+                * Affine.translation(img.shape[1] / 2, img.shape[0] / 2)
+                * Affine.rotation(deg)
+                * Affine.translation(-rotated.width / 2, -rotated.height / 2)
+            )
     w16, h16 = int(rotated.width * SCALE), int(rotated.height * SCALE)
     label = np.array(rotated.resize((w16, h16), Image.BILINEAR))
-    transform = ORIGINAL * Affine.translation(x0, y0) * Affine.scale(rotated.width / w16, rotated.height / h16)
+    transform = transform * Affine.scale(rotated.width / w16, rotated.height / h16)
     return label, transform
 
 
@@ -109,6 +123,61 @@ def test_markers_land_on_their_ground_position(deg):
     assert georef.ortho_drift_m < 0.5
 
 
+@pytest.mark.parametrize("deg", [20.85, -16.02, 30, 60, 89, 90, 180, -75, 40, 45])
+def test_file_that_carries_the_rotation_is_used_as_it_is(deg):
+    label, transform = _run_inference(deg, rotation_in_transform=True)
+    # No annotation: the file alone is enough, whatever was redrawn since inference
+    georef = build_label_georeference(transform, label.shape[1], label.shape[0], None)
+    assert georef.transform == transform
+    assert georef.rotated
+    assert (georef.rotation_deg - deg + 180) % 360 - 180 == pytest.approx(0, abs=1e-6)
+    found = _markers(label)
+    assert len(found) == len(MARKERS)
+    for p in found:
+        assert _nearest(transform * p, _truth()) < 0.03
+
+
+@pytest.mark.parametrize("deg", [20.85, -16.02])
+def test_stamping_the_rebuilt_transform_on_an_old_file_changes_nothing(deg):
+    """Files from before inference wrote the rotation were re-stamped with the rebuilt one."""
+    label, transform = _run_inference(deg)
+    width, height = label.shape[1], label.shape[0]
+    route = dict(crop_transform=_back_mapping(deg, label), original_transform=ORIGINAL)
+    before = build_label_georeference(transform, width, height, _crop_annotation(deg), **route)
+    after = build_label_georeference(before.transform, width, height, _crop_annotation(deg), **route)
+    assert after.transform == before.transform
+    assert after.ortho_drift_m == before.ortho_drift_m
+    assert after.rotation_deg == pytest.approx(before.rotation_deg, abs=1e-9)
+    assert after.crop_size == pytest.approx(before.crop_size, abs=1e-9)
+    old_view, new_view = NorthUpView(before, width, height), NorthUpView(after, width, height)
+    assert (new_view.width, new_view.height) == (old_view.width, old_view.height)
+    assert new_view.point(123.0, 456.0) == old_view.point(123.0, 456.0)
+
+
+def test_near_45_degrees_a_file_that_carries_the_rotation_still_gets_a_north_up_view():
+    label, transform = _run_inference(45, rotation_in_transform=True)
+    width, height = label.shape[1], label.shape[0]
+    x0, y0, x1, y1 = CROP
+
+    # With the original orthophoto, the crop's size comes from the back-mapping route
+    georef = build_label_georeference(
+        transform, width, height, _crop_annotation(45),
+        crop_transform=_back_mapping(45, label), original_transform=ORIGINAL,
+    )
+    assert georef.transform == transform
+    assert georef.crop_size == pytest.approx(((x1 - x0) * 0.05, (y1 - y0) * 0.05), abs=0.2)
+    assert georef.ortho_drift_m < 0.5
+
+    # Without it, the view holds the whole rotated image
+    georef = build_label_georeference(transform, width, height, None)
+    assert georef.transform == transform
+    view = NorthUpView(georef, width, height)
+    for corner in ((0, 0), (width, 0), (width, height), (0, height)):
+        x, y = view.point(*corner)
+        assert -1 <= x <= view.width + 1 and -1 <= y <= view.height + 1
+    assert len(_markers(view.warp(label))) == len(MARKERS)
+
+
 def test_rebuild_does_not_need_the_original_orthophoto():
     label, transform = _run_inference(20.85)
     georef = build_label_georeference(transform, label.shape[1], label.shape[0], _crop_annotation(20.85))
@@ -154,9 +223,10 @@ def test_regenerated_orthophoto_is_flagged():
         assert _nearest(georef.transform * p, _truth()) < GROUND_TOLERANCE_M
 
 
+@pytest.mark.parametrize("rotation_in_transform", [False, True])
 @pytest.mark.parametrize("deg", [20.85, -16.02, 60])
-def test_north_up_view_restores_the_crop_layout(deg):
-    label, transform = _run_inference(deg)
+def test_north_up_view_restores_the_crop_layout(deg, rotation_in_transform):
+    label, transform = _run_inference(deg, rotation_in_transform)
     georef = build_label_georeference(transform, label.shape[1], label.shape[0], _crop_annotation(deg))
     view = NorthUpView(georef, label.shape[1], label.shape[0])
     x0, y0, x1, y1 = CROP

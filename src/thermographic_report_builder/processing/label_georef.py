@@ -2,11 +2,13 @@
 
 Inference crops the orthophoto, rotates the crop by the crop annotation's angle (PIL,
 counter-clockwise about its centre, expand=True) and resamples it to 1.6 cm; panel and
-defect labels live in that pixel space. The TIF it writes keeps the crop's pre-rotation,
-north-up transform, so for a rotated crop the file's own georeference is wrong.
+defect labels live in that pixel space.
 
-The rebuild below needs only that TIF's transform, its size and the angle, so it stays
-right even if the original orthophoto is regenerated after inference.
+Inference writes that rotation into the TIF's transform, and then the file's own
+georeference is the label georeference. TIFs written before it did keep the crop's
+pre-rotation, north-up transform, which is wrong for a rotated crop. The rebuild below
+puts the rotation back from that transform, the image size and the annotation's angle,
+so it stays right even if the original orthophoto is regenerated after inference.
 """
 
 import math
@@ -24,6 +26,10 @@ logger = get_logger(__name__)
 
 # Inference leaves crops at or below this angle unrotated (crop_rotate_utils).
 MIN_ROTATION_DEG = 0.1
+
+# A transform turned by more than this carries the crop rotation itself. A north-up file
+# has no rotation terms at all, and inference never rotates by MIN_ROTATION_DEG or less.
+_CARRIED_ROTATION_DEG = 0.01
 
 # Near 45 degrees the crop's size can't be read back from the rotated canvas: a rectangle
 # at 45 degrees has the same bounding box whatever its aspect ratio.
@@ -57,26 +63,42 @@ def crop_rotation_deg(crop_annotation: Optional[Dict]) -> float:
     return math.degrees(math.atan2(end["y"] - start["y"], end["x"] - start["x"]))
 
 
+def _carried_rotation_deg(transform: Affine) -> float:
+    """The crop rotation a transform already carries; 0 for a north-up file."""
+    return math.degrees(math.atan2(-transform.d, transform.a))
+
+
+def _crop_size_before_rotation(
+    canvas_w: float, canvas_h: float, rotation_deg: float
+) -> Optional[Tuple[float, float]]:
+    """Undo PIL's expand: the crop's ground size from its rotated canvas's; None near 45 degrees.
+
+    canvas_w = crop_w * c + crop_h * s,  canvas_h = crop_w * s + crop_h * c
+    """
+    t = math.radians(rotation_deg)
+    c, s = abs(math.cos(t)), abs(math.sin(t))
+    if abs(c - s) < _MIN_CONDITION:
+        return None
+    total = (canvas_w + canvas_h) / (c + s)
+    diff = (canvas_w - canvas_h) / (c - s)
+    return (total + diff) / 2, (total - diff) / 2
+
+
 def _rebuild(
     inference_transform: Affine, width: int, height: int, rotation_deg: float
 ) -> Optional[Tuple[Affine, Tuple[float, float]]]:
-    """Put back the rotation inference left out of its transform; None near 45 degrees."""
-    t = math.radians(rotation_deg)
-    cos_t, sin_t = math.cos(t), math.sin(t)
-    c, s = abs(cos_t), abs(sin_t)
-    if abs(c - s) < _MIN_CONDITION:
-        return None
-
+    """Put back the rotation an older inference left out of its transform; None near 45 degrees."""
     # The file's transform is the crop's, scaled to the rotated canvas, so this is the
-    # canvas's ground size exactly. Undo PIL's expand to get the crop's:
-    #   canvas_w = crop_w * c + crop_h * s,  canvas_h = crop_w * s + crop_h * c
+    # canvas's ground size exactly.
     px_w, px_h = inference_transform.a, -inference_transform.e
-    canvas_w, canvas_h = width * px_w, height * px_h
-    total = (canvas_w + canvas_h) / (c + s)
-    diff = (canvas_w - canvas_h) / (c - s)
-    crop_w, crop_h = (total + diff) / 2, (total - diff) / 2
+    crop_size = _crop_size_before_rotation(width * px_w, height * px_h, rotation_deg)
+    if crop_size is None:
+        return None
+    crop_w, crop_h = crop_size
 
     # The file's origin is the crop's corner, and PIL keeps the crop's centre fixed.
+    t = math.radians(rotation_deg)
+    cos_t, sin_t = math.cos(t), math.sin(t)
     centre_x = inference_transform.c + crop_w / 2
     centre_y = inference_transform.f - crop_h / 2
     a, b = px_w * cos_t, -px_h * sin_t
@@ -96,6 +118,12 @@ def _back_mapping_route(crop_transform: CropTransform, original_transform: Affin
     return Affine(x1 - x0, x2 - x0, x0, y1 - y0, y2 - y0, y0)
 
 
+def _route_crop_size(crop_transform: CropTransform, original_transform: Affine) -> Tuple[float, float]:
+    """Ground size of the crop as the back-mapping sees it."""
+    p = crop_transform.params
+    return p.crop_width * abs(original_transform.a), p.crop_height * abs(original_transform.e)
+
+
 def build_label_georeference(
     inference_transform: Affine,
     width: int,
@@ -109,7 +137,8 @@ def build_label_georeference(
     Args:
         inference_transform: Transform of odm_orthophoto_1.6cm.tif as inference wrote it
         width, height: Size of that image (the label pixel space)
-        crop_annotation: crop_annotation.json, for the rotation angle
+        crop_annotation: crop_annotation.json, for the rotation angle when the file's
+            transform doesn't carry it
         crop_transform, original_transform: The back-mapping route, when the original
             orthophoto is available; used near 45 degrees and to detect a stale orthophoto
     """
@@ -120,18 +149,30 @@ def build_label_georeference(
 
     transform = inference_transform
     crop_size = (width * inference_transform.a, height * -inference_transform.e)
-    if abs(rotation_deg) > MIN_ROTATION_DEG and inference_transform.is_rectilinear:
+    carried_deg = _carried_rotation_deg(inference_transform)
+    if abs(carried_deg) > _CARRIED_ROTATION_DEG:
+        # The file's transform is already the label georeference. Only the north-up view
+        # still needs the crop's size, read back from the rotated canvas.
+        rotation_deg = carried_deg
+        canvas_w = width * math.hypot(transform.a, transform.d)
+        canvas_h = height * math.hypot(transform.b, transform.e)
+        crop_size = _crop_size_before_rotation(canvas_w, canvas_h, rotation_deg)
+        if crop_size is None and route is not None:
+            crop_size = _route_crop_size(crop_transform, original_transform)
+        if crop_size is None:
+            # Near 45 degrees and no original orthophoto: show the whole rotated canvas.
+            t = math.radians(rotation_deg)
+            c, s = abs(math.cos(t)), abs(math.sin(t))
+            crop_size = (canvas_w * c + canvas_h * s, canvas_w * s + canvas_h * c)
+        logger.info(f"Label georeference read from the file ({rotation_deg:.2f} deg crop rotation)")
+    elif abs(rotation_deg) > MIN_ROTATION_DEG:
         rebuilt = _rebuild(inference_transform, width, height, rotation_deg)
         if rebuilt is not None:
             transform, crop_size = rebuilt
             logger.info(f"Label georeference rebuilt for a {rotation_deg:.2f} deg crop rotation")
         elif route is not None:
-            p = crop_transform.params
             transform = route
-            crop_size = (
-                p.crop_width * abs(original_transform.a),
-                p.crop_height * abs(original_transform.e),
-            )
+            crop_size = _route_crop_size(crop_transform, original_transform)
             logger.info(
                 f"Label georeference from the back-mapping route ({rotation_deg:.2f} deg is "
                 "too close to 45 to rebuild)"
