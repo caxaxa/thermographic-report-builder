@@ -49,7 +49,7 @@ from .camera_projector import CameraProjector, RawImageMatch, load_reconstructio
 from .mesh_backtracker import MeshBacktracker
 from .source_map_backtracker import SourceMapBacktracker
 from .crop_transform import CropTransform
-from .thermal_extractor import ThermalExtractor, TemperatureReading
+from .thermal_extractor import ThermalCalibration, ThermalExtractor, TemperatureReading
 from .thermal_annotator import ThermalAnnotator
 
 logger = get_logger(__name__)
@@ -139,6 +139,7 @@ class GPSMatcher:
         crop_transform: Optional[CropTransform] = None,
         enable_temperature: bool = True,
         tracks_path: Optional[Path] = None,
+        thermal_calibration: Optional[ThermalCalibration] = None,
     ):
         """
         Initialize image matcher.
@@ -201,7 +202,7 @@ class GPSMatcher:
 
         # Initialize thermal extractor and annotator if enabled
         if enable_temperature:
-            self.thermal_extractor = ThermalExtractor()
+            self.thermal_extractor = ThermalExtractor(thermal_calibration)
             self.thermal_annotator = ThermalAnnotator(self.thermal_extractor)
         else:
             self.thermal_extractor = None

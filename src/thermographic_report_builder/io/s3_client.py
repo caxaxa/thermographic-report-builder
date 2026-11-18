@@ -7,6 +7,7 @@ from botocore.exceptions import ClientError
 from solar_report_utils import BaseS3Client
 
 from ..config import settings
+from ..models.inspection import InspectionDetails
 from ..utils.logger import get_logger
 from ..utils.exceptions import S3DownloadError, S3UploadError
 
@@ -627,6 +628,40 @@ class S3Client(BaseS3Client):
             else:
                 logger.warning(f"Failed to download annotation overrides: {e}")
                 return False
+
+    def download_inspection_details(self) -> InspectionDetails | None:
+        """
+        Read inspection.json, the inspection details the client entered on the platform.
+
+        The API writes it beside the project's uploads. Missing or unreadable details return
+        None, and the report then marks them as not provided.
+        """
+        key = f"{settings.user_id}/projects/{settings.project_id}/inspection.json"
+        bucket = settings.uploads_bucket
+
+        logger.info(f"Checking for inspection details at s3://{bucket}/{key}")
+
+        try:
+            body = self.s3.get_object(Bucket=bucket, Key=key)["Body"].read()
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchKey', '404'):
+                logger.info("No inspection details found - the report marks them as not provided")
+            else:
+                logger.warning(f"Failed to download inspection details: {e}")
+            return None
+        try:
+            return InspectionDetails.model_validate_json(body)
+        except ValueError as e:
+            logger.warning(f"Ignoring unreadable inspection details: {e}")
+            return None
+
+    def read_raw_image_head(self, s3_key: str, n_bytes: int = 65536) -> bytes:
+        """First bytes of a raw image, where DJI writes EXIF and XMP ahead of the radiometric data."""
+        response = self.s3.get_object(
+            Bucket=settings.uploads_bucket, Key=s3_key, Range=f"bytes=0-{n_bytes - 1}"
+        )
+        return response["Body"].read()
 
     def download_crop_annotation(self, local_path: Path) -> Path | None:
         """

@@ -189,6 +189,9 @@ TITLE_PAGE_TEXTS = {
         "thermal_inspection_report": "Relatório de Inspeção por Imagem Térmica",
         "technical_responsible": "Responsável Técnico:",
         "date": "Data:",
+        "inspection_date": "Data da inspeção:",
+        "issue_date": "Data de emissão:",
+        "not_informed": "Não informado",
         "location": "Localização:",
         "address": "Endereço:",
         "software": "Software:",
@@ -205,6 +208,9 @@ TITLE_PAGE_TEXTS = {
         "thermal_inspection_report": "Thermal Imaging Inspection Report",
         "technical_responsible": "Technical Responsible:",
         "date": "Date:",
+        "inspection_date": "Inspection date:",
+        "issue_date": "Issue date:",
+        "not_informed": "Not provided",
         "location": "Location:",
         "address": "Address:",
         "software": "Software:",
@@ -568,3 +574,383 @@ def get_preview_text(key: str, language: str = "pt-BR") -> str:
     """Get preview-mode suppression text for the specified language."""
     lang = language if language in PREVIEW_TEXTS else "pt-BR"
     return PREVIEW_TEXTS[lang].get(key, key)
+
+
+# Inspection record (IEC TS 62446-3 clause 8): who, with what, when and under which conditions
+INSPECTION_TEXTS = {
+    "pt-BR": {
+        "section_title": "Dados da Inspeção",
+        "intro": (
+            "Esta seção registra quem fez a inspeção, com que equipamento, quando e em que condições, "
+            "conforme a cláusula 8 da IEC TS 62446-3. Dados que a plataforma não recebeu aparecem como "
+            "``Não informado'' e estão listados na seção \\textbf{Desvios e Limitações}."
+        ),
+        "intro_structure": (
+            " A seção \\textbf{Dados da Inspeção} registra quem fez a inspeção, com que equipamento, quando "
+            "e em que condições, e a seção \\textbf{Desvios e Limitações} lista o que não seguiu o "
+            "procedimento da IEC TS 62446-3."
+        ),
+        "execution_caption": "Execução e equipamento",
+        "conditions_caption": "Condições ambientais e parâmetros de medição",
+        "col_item": "Item",
+        "col_record": "Registro",
+        "flight_time": "Data e horário do voo",
+        "flight_time_value": "{date}, das {start} às {end} (relógio do drone)",
+        "frames": "Imagens térmicas",
+        "pilot": "Piloto / termografista",
+        "engineer": "Responsável técnico",
+        "engineer_value": "{name}, CREA {crea}",
+        "aircraft": "Aeronave",
+        "camera": "Câmera térmica",
+        "camera_value": "{camera}, câmera radiométrica de onda longa (LWIR)",
+        "serial": "nº de série {serial}",
+        "calibration": "Calibração da câmera",
+        "calibration_value": "{lab}, certificado {certificate}, de {date}",
+        "processing": "Processamento",
+        "processing_value": (
+            "GreTA®; temperaturas lidas das imagens radiométricas originais com o DJI Thermal SDK"
+        ),
+        "irradiance": "Irradiância",
+        "irradiance_measured": "{value} W/m$^2$, medida no local ({source})",
+        "irradiance_estimated": "{value} W/m$^2$, global horizontal estimada, média das {start} às {end}",
+        "air_temperature": "Temperatura do ar",
+        "humidity": "Umidade relativa do ar",
+        "wind": "Velocidade do vento a 10 m",
+        "cloud": "Nebulosidade",
+        "source": "Fonte das condições",
+        "source_value": "{dataset}; ponto da grade {lat}, {lon}",
+        "source_weather": "Fonte da temperatura, umidade e vento",
+        "irradiance_satellite": (
+            "{value} W/m$^2$, global horizontal observada pelo satélite {satellite} (NOAA, grade de "
+            "{resolution}), média das imagens das {start} às {end}"
+        ),
+        "clear_sky": "Referência de céu claro",
+        "clear_sky_value": "{value} W/m$^2$, calculada pela data, hora e local da inspeção (modelo de Haurwitz)",
+        "cloud_satellite": (
+            "{okta}/8, observada pelo satélite {satellite} (máscara de nuvens de 2 km, num raio de cerca de 10 km)"
+        ),
+        "satellite_source": "Fonte da irradiância e das nuvens",
+        "satellite_source_value": "NOAA {satellite}, produtos DSR e ACM (dados públicos)",
+        "emissivity": "Emissividade",
+        "reflected": "Temperatura refletida",
+        "calc_humidity": "Umidade usada no cálculo",
+        "distance": "Distância ao objeto",
+        "distance_altitude": "telêmetro laser de cada imagem (ou altitude de voo), até {max} m",
+        "emissivity_value": "{value} (vidro do módulo, onda longa)",
+        "reflected_measured": "{value} °C, medida no local",
+        "reflected_sky_estimate": "{value} °C, temperatura do céu estimada pelas condições do dia",
+        "reflected_default": "{value} °C, valor padrão",
+        "humidity_dataset": "{value}\\%, do conjunto de dados meteorológicos",
+        "humidity_default": "{value}\\%, valor padrão",
+        "distance_fixed": "{value} m",
+        "limits_note": (
+            "Limites da IEC TS 62446-3 para a inspeção: irradiância de pelo menos 600 W/m$^2$, vento de "
+            "até 28 km/h e nebulosidade de até 2/8."
+        ),
+        "not_informed": "Não informado",
+        "not_informed_f": "Não informada",
+        "not_available": "Não disponível",
+        "dataset_ecmwf_ifs": "ECMWF IFS (análise operacional, grade de 9 km), via Open-Meteo",
+        "dataset_era5": "ERA5 (reanálise Copernicus/ECMWF, grade de 0,25°), via Open-Meteo",
+    },
+    "en-US": {
+        "section_title": "Inspection Data",
+        "intro": (
+            "This section records who carried out the inspection, with which equipment, when and under "
+            "which conditions, as clause 8 of IEC TS 62446-3 requires. Data the platform did not receive "
+            "shows as ``Not provided'' and is listed under \\textbf{Deviations and Limitations}."
+        ),
+        "intro_structure": (
+            " The \\textbf{Inspection Data} section records who carried out the inspection, with which "
+            "equipment, when and under which conditions, and \\textbf{Deviations and Limitations} lists "
+            "what did not follow the IEC TS 62446-3 procedure."
+        ),
+        "execution_caption": "Execution and equipment",
+        "conditions_caption": "Ambient conditions and measurement parameters",
+        "col_item": "Item",
+        "col_record": "Record",
+        "flight_time": "Flight date and time",
+        "flight_time_value": "{date}, {start} to {end} (drone clock)",
+        "frames": "Thermal images",
+        "pilot": "Pilot / thermographer",
+        "engineer": "Responsible engineer",
+        "engineer_value": "{name}, CREA {crea}",
+        "aircraft": "Aircraft",
+        "camera": "Thermal camera",
+        "camera_value": "{camera}, long-wave (LWIR) radiometric camera",
+        "serial": "serial no. {serial}",
+        "calibration": "Camera calibration",
+        "calibration_value": "{lab}, certificate {certificate}, dated {date}",
+        "processing": "Processing",
+        "processing_value": "GreTA®; temperatures read from the original radiometric images with the DJI Thermal SDK",
+        "irradiance": "Irradiance",
+        "irradiance_measured": "{value} W/m$^2$, measured on site ({source})",
+        "irradiance_estimated": "{value} W/m$^2$, estimated global horizontal, mean from {start} to {end}",
+        "air_temperature": "Air temperature",
+        "humidity": "Relative humidity",
+        "wind": "Wind speed at 10 m",
+        "cloud": "Cloud cover",
+        "source": "Source of conditions",
+        "source_value": "{dataset}; grid point {lat}, {lon}",
+        "source_weather": "Source of temperature, humidity and wind",
+        "irradiance_satellite": (
+            "{value} W/m$^2$, global horizontal observed by the {satellite} satellite (NOAA, {resolution} "
+            "grid), mean of the images from {start} to {end}"
+        ),
+        "clear_sky": "Clear-sky reference",
+        "clear_sky_value": "{value} W/m$^2$, computed from the inspection date, time and place (Haurwitz model)",
+        "cloud_satellite": "{okta}/8, observed by the {satellite} satellite (2 km cloud mask, within about 10 km)",
+        "satellite_source": "Source of irradiance and clouds",
+        "satellite_source_value": "NOAA {satellite}, DSR and ACM products (public data)",
+        "emissivity": "Emissivity",
+        "reflected": "Reflected temperature",
+        "calc_humidity": "Humidity used in the calculation",
+        "distance": "Object distance",
+        "distance_altitude": "each image's laser rangefinder (or flight altitude), up to {max} m",
+        "emissivity_value": "{value} (module glass, long-wave)",
+        "reflected_measured": "{value} °C, measured on site",
+        "reflected_sky_estimate": "{value} °C, sky temperature estimated from the day's conditions",
+        "reflected_default": "{value} °C, default value",
+        "humidity_dataset": "{value}\\%, from the weather dataset",
+        "humidity_default": "{value}\\%, default value",
+        "distance_fixed": "{value} m",
+        "limits_note": (
+            "IEC TS 62446-3 limits for the inspection: irradiance of at least 600 W/m$^2$, wind up to "
+            "28 km/h and cloud cover up to 2/8."
+        ),
+        "not_informed": "Not provided",
+        "not_informed_f": "Not provided",
+        "not_available": "Not available",
+        "dataset_ecmwf_ifs": "ECMWF IFS (operational analysis, 9 km grid), via Open-Meteo",
+        "dataset_era5": "ERA5 (Copernicus/ECMWF reanalysis, 0.25° grid), via Open-Meteo",
+    },
+}
+
+
+def get_inspection_text(key: str, language: str = "pt-BR") -> str:
+    """Get an inspection-record text for the specified language."""
+    lang = language if language in INSPECTION_TEXTS else "pt-BR"
+    return INSPECTION_TEXTS[lang].get(key, key)
+
+
+# Deviations and limitations the report declares (IEC TS 62446-3, 5.1 and clause 8)
+DEVIATION_TEXTS = {
+    "pt-BR": {
+        "section_title": "Desvios e Limitações",
+        "intro": (
+            "A IEC TS 62446-3 pede que o relatório registre todo desvio ou limitação conhecida do "
+            "procedimento. Nesta inspeção:"
+        ),
+        "none": "Nenhum desvio ou limitação foi identificado.",
+        "no_pilot": "O piloto ou termografista e sua qualificação não foram informados.",
+        "no_pilot_qualification": "A qualificação do termografista não foi informada.",
+        "no_engineer": "O responsável técnico e seu registro no CREA não foram informados.",
+        "no_address": "O endereço da usina não foi informado.",
+        "no_flight_time": "As imagens não registram a data e o horário do voo.",
+        "no_camera_model": "As imagens não registram o modelo da câmera.",
+        "irradiance_satellite": (
+            "A irradiância foi observada pelo satélite {satellite} da NOAA, não medida no local com sensor "
+            "calibrado, como pede a IEC TS 62446-3."
+        ),
+        "irradiance_estimated": (
+            "A irradiância foi estimada a partir de {dataset}, não medida no local com sensor calibrado, "
+            "como pede a IEC TS 62446-3."
+        ),
+        "irradiance_unavailable": (
+            "A irradiância não foi medida nem estimada; não é possível confirmar o mínimo de 600 W/m$^2$."
+        ),
+        "weather_estimated": (
+            "Temperatura do ar e vento foram estimados a partir de {dataset}, em média horária e na "
+            "resolução da grade."
+        ),
+        "weather_estimated_cloud": (
+            "Temperatura do ar, vento e nebulosidade foram estimados a partir de {dataset}, em média "
+            "horária e na resolução da grade."
+        ),
+        "weather_unavailable": "Temperatura do ar, umidade e vento não foram obtidos para esta inspeção.",
+        "irradiance_low": (
+            "A irradiância {kind} de {value} W/m$^2$ ficou abaixo do mínimo de 600 W/m$^2$; anomalias "
+            "de baixo contraste podem não ter sido detectadas."
+        ),
+        "kind_measured": "medida",
+        "kind_satellite": "observada por satélite",
+        "kind_estimated": "estimada",
+        "cloud_high": "A nebulosidade {kind} de {okta}/8 ficou acima do máximo de 2/8.",
+        "cloud_kind_satellite": "observada por satélite",
+        "cloud_kind_estimated": "estimada",
+        "no_calibration": (
+            "O certificado de calibração da câmera térmica não foi informado (IEC TS 62446-3, Tabela 1, item j)."
+        ),
+        "calibration_expired": (
+            "A calibração da câmera, de {date}, tinha mais de dois anos na data do voo; a IEC TS 62446-3 "
+            "pede calibração rastreável ao menos a cada dois anos."
+        ),
+        "wind_high": (
+            "O vento estimado de {value} km/h ficou acima do máximo de 28 km/h; o resfriamento pelo "
+            "vento reduz as diferenças de temperatura."
+        ),
+        "reflected_estimated": (
+            "A temperatura refletida ({value} °C) foi estimada pela temperatura do céu nas condições do dia, "
+            "não medida no local."
+        ),
+        "reflected_default": "A temperatura refletida ({value} °C) é um valor padrão, não medida no local nem estimada.",
+        "humidity_default": "A umidade usada no cálculo ({value}\\%) é um valor padrão.",
+        "no_visual_photos": "O relatório não traz foto visual de cada anomalia (IEC TS 62446-3, 4.3).",
+        "no_current_reading": (
+            "A corrente dos módulos ou strings e o estado de operação da usina durante o voo não foram "
+            "registrados (IEC TS 62446-3, Tabela 2)."
+        ),
+        "coverage_not_verified": (
+            "O número de módulos analisados não foi conferido com o total instalado na usina; módulos "
+            "fora das imagens não aparecem neste relatório."
+        ),
+    },
+    "en-US": {
+        "section_title": "Deviations and Limitations",
+        "intro": (
+            "IEC TS 62446-3 requires the report to note every known deviation or limitation of the "
+            "procedure. For this inspection:"
+        ),
+        "none": "No deviation or limitation was identified.",
+        "no_pilot": "The pilot or thermographer and their qualification were not provided.",
+        "no_pilot_qualification": "The thermographer's qualification was not provided.",
+        "no_engineer": "The responsible engineer and their CREA registration were not provided.",
+        "no_address": "The plant address was not provided.",
+        "no_flight_time": "The images do not record the flight date and time.",
+        "no_camera_model": "The images do not record the camera model.",
+        "irradiance_satellite": (
+            "Irradiance was observed by NOAA's {satellite} satellite, not measured on site with a "
+            "calibrated sensor as IEC TS 62446-3 requires."
+        ),
+        "irradiance_estimated": (
+            "Irradiance was estimated from {dataset}, not measured on site with a calibrated sensor as "
+            "IEC TS 62446-3 requires."
+        ),
+        "irradiance_unavailable": (
+            "Irradiance was neither measured nor estimated, so the 600 W/m$^2$ minimum cannot be confirmed."
+        ),
+        "weather_estimated": "Air temperature and wind were estimated from {dataset}, as hourly means at grid resolution.",
+        "weather_estimated_cloud": (
+            "Air temperature, wind and cloud cover were estimated from {dataset}, as hourly means at grid "
+            "resolution."
+        ),
+        "weather_unavailable": "Air temperature, humidity and wind were not obtained for this inspection.",
+        "irradiance_low": (
+            "The {kind} irradiance of {value} W/m$^2$ was below the 600 W/m$^2$ minimum; low-contrast "
+            "anomalies may have gone undetected."
+        ),
+        "kind_measured": "measured",
+        "kind_satellite": "satellite-observed",
+        "kind_estimated": "estimated",
+        "cloud_high": "The {kind} cloud cover of {okta}/8 was above the 2/8 maximum.",
+        "cloud_kind_satellite": "satellite-observed",
+        "cloud_kind_estimated": "estimated",
+        "no_calibration": (
+            "The thermal camera's calibration certificate was not provided (IEC TS 62446-3, Table 1, item j)."
+        ),
+        "calibration_expired": (
+            "The camera calibration of {date} was more than two years old on the flight date; IEC TS "
+            "62446-3 requires traceable calibration at least every two years."
+        ),
+        "wind_high": (
+            "The estimated wind of {value} km/h was above the 28 km/h maximum; wind cooling reduces "
+            "temperature differences."
+        ),
+        "reflected_estimated": (
+            "The reflected temperature ({value} °C) was estimated from the sky temperature under the day's "
+            "conditions, not measured on site."
+        ),
+        "reflected_default": (
+            "The reflected temperature ({value} °C) is a default value, neither measured on site nor estimated."
+        ),
+        "humidity_default": "The humidity used in the calculation ({value}\\%) is a default value.",
+        "no_visual_photos": "The report has no visual photo of each anomaly (IEC TS 62446-3, 4.3).",
+        "no_current_reading": (
+            "Module or string current and the plant's operating state during the flight were not recorded "
+            "(IEC TS 62446-3, Table 2)."
+        ),
+        "coverage_not_verified": (
+            "The number of modules analysed was not checked against the plant's installed total; modules "
+            "outside the images do not appear in this report."
+        ),
+    },
+}
+
+
+def get_deviation_text(key: str, language: str = "pt-BR") -> str:
+    """Get a deviations-section text for the specified language."""
+    lang = language if language in DEVIATION_TEXTS else "pt-BR"
+    return DEVIATION_TEXTS[lang].get(key, key)
+
+
+# Likely cause and recommended action per finding, by defect type and severity
+GUIDANCE_TEXTS = {
+    "pt-BR": {
+        "likely_cause": "Causa provável:",
+        "recommended_action": "Ação recomendada:",
+        "col_action": "Ação recomendada",
+        "hotspot_cause": (
+            "aquecimento localizado de célula ou conexão: célula trincada ou defeituosa, solda ou conexão "
+            "degradada, ou sombreamento e sujeira localizados."
+        ),
+        "hotspot_action_urgent": (
+            "inspecionar o módulo no local (vidro, sujeira, sombreamento e caixa de junção) e medir a "
+            "string ou a curva I-V; substituir o módulo se o defeito se confirmar."
+        ),
+        "hotspot_action_routine": (
+            "verificar sujeira e sombreamento no local e acompanhar o ponto na próxima inspeção."
+        ),
+        "hotspot_short_urgent": "Inspecionar e medir",
+        "hotspot_short_routine": "Limpar e acompanhar",
+        "diode_cause": (
+            "um substring do módulo deixou de gerar e aquece, com o diodo de bypass conduzindo ou em curto."
+        ),
+        "diode_action": (
+            "verificar a caixa de junção e os diodos de bypass e medir a tensão do módulo; substituir o "
+            "diodo ou o módulo."
+        ),
+        "diode_short": "Verificar diodo de bypass",
+        "offline_cause": (
+            "módulo sem corrente: conector aberto, cabo danificado, fusível ou proteção atuada, ou falha "
+            "no inversor ou no MPPT."
+        ),
+        "offline_action": (
+            "verificar conectores, cabos, fusíveis e o inversor da string, e medir tensão e corrente."
+        ),
+        "offline_short": "Verificar conexões e inversor",
+    },
+    "en-US": {
+        "likely_cause": "Likely cause:",
+        "recommended_action": "Recommended action:",
+        "col_action": "Recommended action",
+        "hotspot_cause": (
+            "localized heating of a cell or connection: a cracked or defective cell, a degraded solder "
+            "joint or connection, or local shading and soiling."
+        ),
+        "hotspot_action_urgent": (
+            "inspect the module on site (glass, soiling, shading and junction box) and measure the string "
+            "or its I-V curve; replace the module if the defect is confirmed."
+        ),
+        "hotspot_action_routine": "check soiling and shading on site and follow the spot at the next inspection.",
+        "hotspot_short_urgent": "Inspect and measure",
+        "hotspot_short_routine": "Clean and monitor",
+        "diode_cause": "a module substring stopped producing and heats up, with its bypass diode conducting or shorted.",
+        "diode_action": (
+            "check the junction box and bypass diodes and measure the module voltage; replace the diode or "
+            "the module."
+        ),
+        "diode_short": "Check bypass diode",
+        "offline_cause": (
+            "module carries no current: an open connector, a damaged cable, a blown fuse or tripped "
+            "protection, or an inverter or MPPT fault."
+        ),
+        "offline_action": "check connectors, cables, fuses and the string's inverter, and measure voltage and current.",
+        "offline_short": "Check connections and inverter",
+    },
+}
+
+
+def get_guidance_text(key: str, language: str = "pt-BR") -> str:
+    """Get a finding-guidance text for the specified language."""
+    lang = language if language in GUIDANCE_TEXTS else "pt-BR"
+    return GUIDANCE_TEXTS[lang].get(key, key)

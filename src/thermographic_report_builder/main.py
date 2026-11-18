@@ -13,6 +13,12 @@ from .processing.camera_projector import CameraProjector
 from .processing.label_georef import NorthUpView, build_label_georeference
 from .report import ReportBuilder, export_metrics_json, export_metrics_csv, export_panel_grid_json
 from .models.report import ReportConfig
+from .models.inspection import FlightMetadata
+from .processing.measurement import measurement_parameters
+from .processing.thermal_extractor import ThermalCalibration
+from .processing.flight_metadata import collect_flight_metadata
+from .io.weather_client import fetch_ambient_conditions
+from .io.goes_irradiance import fetch_satellite_conditions
 from .models.job import JobOutput
 from .utils import setup_logging, get_logger, PixelToLatLonConverter, reverse_geocode, get_orthophoto_center
 from .utils.exceptions import ProcessingError
@@ -391,6 +397,51 @@ def main() -> int:
             view=north_up,
         )
 
+        # ===== STEP 6.5: Inspection record (IEC TS 62446-3 clause 8) =====
+        logger.info("=" * 80)
+        logger.info("STEP 6.5: Inspection record: details, flight, conditions, measurement parameters")
+        logger.info("=" * 80)
+
+        center = None
+        try:
+            center = get_orthophoto_center(label_georef.transform, img_w, img_h, viz_crs)
+            logger.info(f"Orthophoto center: ({center[0]:.6f}, {center[1]:.6f})")
+        except Exception as e:
+            logger.warning(f"Could not compute the orthophoto center: {e}")
+
+        inspection = s3_client.download_inspection_details()
+        flight = FlightMetadata()
+        try:
+            flight = collect_flight_metadata(s3_client.list_raw_images(), s3_client.read_raw_image_head)
+        except Exception as e:
+            logger.warning(f"Could not read flight metadata from the raw images: {e}")
+
+        conditions = None
+        if (settings.weather_enabled or settings.weather_api_key) and center and flight.midpoint:
+            conditions = fetch_ambient_conditions(
+                center[0],
+                center[1],
+                flight.midpoint,
+                base_url=settings.weather_api_url,
+                api_key=settings.weather_api_key,
+            )
+        satellite = None
+        if settings.satellite_enabled and center and flight.start:
+            satellite = fetch_satellite_conditions(
+                center[0], center[1], flight.start, flight.end or flight.start, work_dir=work_dir / "goes"
+            )
+        measurement = measurement_parameters(
+            emissivity=settings.thermal_emissivity,
+            default_reflected_c=settings.thermal_reflected_temp,
+            default_humidity_pct=settings.thermal_relative_humidity,
+            object_distance_m=settings.thermal_object_distance,
+            distance_from_frames=settings.thermal_auto_altitude,
+            inspection=inspection,
+            conditions=conditions,
+            satellite=satellite,
+        )
+        logger.info(f"Measurement parameters: {measurement.model_dump()}")
+
         # ===== STEP 7: Match raw thermal images (reprojection or GPS fallback) =====
         logger.info("=" * 80)
         logger.info("STEP 7: Matching raw thermal images to defects")
@@ -493,6 +544,7 @@ def main() -> int:
             crop_transform=crop_transform,
             enable_temperature=True,
             tracks_path=tracks_path,
+            thermal_calibration=ThermalCalibration.from_measurement(measurement),
         )
         matched_count, defect_matches = gps_matcher.match_images_to_panels(
             panel_grid=panel_grid, temp_dir=raw_images_dir, output_dir=images_dir
@@ -561,23 +613,27 @@ def main() -> int:
 
         # Derive location from orthophoto center if not explicitly set
         report_location = settings.location
-        if not report_location:
+        if not report_location and center:
             try:
-                center_lat, center_lon = get_orthophoto_center(label_georef.transform, img_w, img_h, viz_crs)
-                logger.info(f"Orthophoto center: ({center_lat:.6f}, {center_lon:.6f})")
-                report_location = reverse_geocode(center_lat, center_lon)
+                report_location = reverse_geocode(center[0], center[1])
             except Exception as e:
                 logger.warning(f"Could not derive location from orthophoto: {e}")
                 report_location = ""
 
+        # The client's inspection details win over the job settings
         report_config = ReportConfig(
             area_name=settings.area_name,
             client_name=settings.client_name,
             language=settings.report_language,
-            engineer_name=settings.engineer_name,
-            crea_number=settings.crea_number,
+            engineer_name=(inspection.engineer_name if inspection else None) or settings.engineer_name,
+            crea_number=(inspection.engineer_crea if inspection else None) or settings.crea_number,
             location=report_location,
-            address=settings.address,
+            address=(inspection.plant_address if inspection else None) or settings.address,
+            inspection=inspection,
+            flight=flight,
+            conditions=conditions,
+            satellite=satellite,
+            measurement=measurement,
         )
 
         builder = ReportBuilder(

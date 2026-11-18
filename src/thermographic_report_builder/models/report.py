@@ -1,7 +1,17 @@
 """Data models for report configuration and metadata."""
 
 from datetime import datetime
+from typing import Optional
+
 from pydantic import BaseModel, Field
+
+from .inspection import (
+    AmbientConditions,
+    FlightMetadata,
+    InspectionDetails,
+    MeasurementParameters,
+    SatelliteConditions,
+)
 
 
 class ReportConfig(BaseModel):
@@ -18,6 +28,12 @@ class ReportConfig(BaseModel):
         default="Rua Manoel Inácio de Souza, n. 24, C.E.P : 79.020-220",
         description="Farm address",
     )
+    # Inspection record for IEC TS 62446-3 clause 8 (None = not available)
+    inspection: Optional[InspectionDetails] = None
+    flight: Optional[FlightMetadata] = None
+    conditions: Optional[AmbientConditions] = None
+    satellite: Optional[SatelliteConditions] = None
+    measurement: Optional[MeasurementParameters] = None
 
 
 class DefectMetrics(BaseModel):
