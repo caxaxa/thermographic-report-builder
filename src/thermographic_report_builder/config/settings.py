@@ -41,10 +41,23 @@ class Settings(BaseReportSettings):
     report_language: str = "pt-BR"
     company_name: str = "Aisol"
     client_name: str = ""  # Will be set from user email
-    engineer_name: str = "Automático"
-    crea_number: str = ""  # Left blank for automated reports
+    # Engineer, CREA and plant address come from the project's inspection.json; blank prints
+    # "Não informado" and is listed as a deviation.
+    engineer_name: str = ""
+    crea_number: str = ""
     location: str = ""  # Will be derived from orthophoto GPS coordinates
-    address: str = "Rua Manoel Inácio de Souza, n. 24, C.E.P : 79.020-220"
+    address: str = ""
+
+    # ===== Ambient conditions (weather dataset) =====
+    # ECMWF data through the Open-Meteo archive API. Its keyless endpoint is non-commercial only,
+    # so the lookup runs only with a commercial key (weather_api_url =
+    # https://customer-archive-api.open-meteo.com/v1/archive + weather_api_key), or when
+    # weather_enabled is set for non-commercial testing.
+    weather_enabled: bool = False
+    # Irradiance and cloud cover observed by NOAA GOES-East (public domain, no key needed)
+    satellite_enabled: bool = True
+    weather_api_url: str = "https://archive-api.open-meteo.com/v1/archive"
+    weather_api_key: str = ""
 
     # ===== PDF Generation =====
     pdf_quality: int = 90
@@ -54,10 +67,12 @@ class Settings(BaseReportSettings):
     # ===== Thermal Calibration Parameters =====
     # These parameters affect temperature accuracy in thermal analysis
     # See DJI Thermal SDK documentation for details
-    thermal_emissivity: float = 0.60  # Effective emissivity for solar panels
+    # PV module glass in the camera's 8-14 um band at the near-normal angles of a drone looking
+    # down (literature 0.85-0.90). The first version used 0.60, which inflated every delta-T ~25%.
+    thermal_emissivity: float = 0.85
     thermal_object_distance: float = 25.0  # Default flight altitude in meters (1-25m range)
     thermal_relative_humidity: float = 50.0  # Relative humidity % (20-100%)
-    thermal_reflected_temp: float = 20.0  # Reflected apparent temperature in Celsius
+    thermal_reflected_temp: float = 20.0  # Fallback only: measured on site or estimated from the sky first
     thermal_auto_altitude: bool = True  # Extract altitude from EXIF if available
 
     # ===== Thermal-Visual Alignment Parameters =====

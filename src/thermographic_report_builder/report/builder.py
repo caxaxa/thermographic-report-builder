@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import subprocess
 
 import pylatex as pl
@@ -12,7 +12,9 @@ from pylatex.utils import NoEscape, bold, escape_latex
 from ..models.defect import Panel
 from ..models.report import ReportConfig
 from ..models.annotation_manifest import AnnotationManifest
+from ..models.inspection import FlightMetadata, InspectionDetails
 from .capacity import SEVERITY_ORDER, compute_capacity_summary
+from .compliance import guidance_keys, list_deviations
 from ..config.constants import (
     get_capacity_text,
     DEFECT_COLORS,
@@ -27,6 +29,9 @@ from ..config.constants import (
     get_thermal_legend_text,
     get_appendix_text,
     get_preview_text,
+    get_inspection_text,
+    get_deviation_text,
+    get_guidance_text,
 )
 from ..utils.logger import get_logger
 from ..utils.exceptions import ReportGenerationError
@@ -198,6 +203,9 @@ class ReportBuilder:
         # Section 2: Client data
         self._add_client_section(doc)
 
+        # Section 3: Inspection record (IEC TS 62446-3 clause 8)
+        self._add_inspection_section(doc)
+
         # Section 3: Area overview
         self._add_area_overview(doc)
 
@@ -209,6 +217,9 @@ class ReportBuilder:
 
         # Section 5-7: Defect details by type
         self._add_defect_details_by_type(doc)
+
+        # Deviations and limitations of the procedure (IEC TS 62446-3, 5.1)
+        self._add_deviations_section(doc)
 
         # Appendix: Flight data and ODM statistics (if available)
         self._add_appendix(doc)
@@ -390,7 +401,11 @@ RoyalBlue]
         # Second title page with details - get localized texts
         thermal_report = get_title_page_text("thermal_inspection_report", self.config.language)
         tech_responsible = get_title_page_text("technical_responsible", self.config.language)
-        date_label = get_title_page_text("date", self.config.language)
+        inspection_date_label = get_title_page_text("inspection_date", self.config.language)
+        issue_date_label = get_title_page_text("issue_date", self.config.language)
+        not_informed = get_title_page_text("not_informed", self.config.language)
+        flight = self.config.flight
+        inspection_date = self._fmt_date(flight.start) if flight and flight.start else not_informed
         location_label = get_title_page_text("location", self.config.language)
         address_label = get_title_page_text("address", self.config.language)
         software_label = get_title_page_text("software", self.config.language)
@@ -406,11 +421,12 @@ RoyalBlue]
         doc.append(NoEscape(r"\begin{center}"))
         doc.append(NoEscape(r"{\large\bfseries " + thermal_report + r"}\\"))
         doc.append(NoEscape(r"\vspace*{0.5cm}"))
-        doc.append(NoEscape(f"\\textbf{{{tech_responsible}}} {escape_latex(self.config.engineer_name)}\\\\"))
-        doc.append(NoEscape(f"\\textbf{{CREA:}} {escape_latex(self.config.crea_number)}\\\\"))
-        doc.append(NoEscape(f"\\textbf{{{date_label}}} {datetime.now().strftime('%B %Y')}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{{tech_responsible}}} {escape_latex(self.config.engineer_name or not_informed)}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{CREA:}} {escape_latex(self.config.crea_number or not_informed)}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{{inspection_date_label}}} {inspection_date}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{{issue_date_label}}} {self._fmt_date(datetime.now())}\\\\"))
         doc.append(NoEscape(f"\\textbf{{{location_label}}} {escape_latex(self.config.location)}\\\\"))
-        doc.append(NoEscape(f"\\textbf{{{address_label}}} {escape_latex(self.config.address)}\\\\"))
+        doc.append(NoEscape(f"\\textbf{{{address_label}}} {escape_latex(self.config.address or not_informed)}\\\\"))
         doc.append(NoEscape(f"\\textbf{{{software_label}}} {software_desc}\\\\"))
         doc.append(NoEscape(r"\end{center}"))
         doc.append(NoEscape(r"\rule{\linewidth}{0.5pt}"))
@@ -433,6 +449,7 @@ RoyalBlue]
         intro_title = get_report_text("introduction_title", self.config.language)
         doc.append(NoEscape(r"\section{" + intro_title + r"}"))
         doc.append(NoEscape(get_report_intro(self.config.language)))
+        doc.append(NoEscape(get_inspection_text("intro_structure", self.config.language)))
 
         # Add drone intro text if ODM stats are available
         if self.odm_stats:
@@ -465,6 +482,240 @@ RoyalBlue]
             doc.append(bold(f"{location_label}: "))
             doc.append(f"{escape_latex(self.config.location)}\n\n")
 
+    def _fmt_date(self, value) -> str:
+        """Dates as the report's readers write them."""
+        if self.config.language in ("en-US", "en"):
+            return value.strftime("%b %d, %Y")
+        return value.strftime("%d/%m/%Y")
+
+    def _worst_severity(self, panel_id: str, defect_type: str) -> Optional[str]:
+        """Most urgent ΔT class among one panel's annotated defects of one type."""
+        if not self.annotation_manifest:
+            return None
+        prefix = f"{defect_type}_({panel_id})_defeito"
+        severities = [
+            ann.severity
+            for ann in self.annotation_manifest.annotations
+            if ann.defect_id.startswith(prefix) and ann.delta_t is not None and ann.severity in SEVERITY_ORDER
+        ]
+        return min(severities, key=SEVERITY_ORDER.get) if severities else None
+
+    def _add_record_table(self, doc: pl.Document, caption: str, rows: list) -> None:
+        """Two-column item/record table, as used by the inspection section."""
+        lang = self.config.language
+        with doc.create(pl.Table(position="h!")) as table:
+            table.add_caption(caption)
+            table.append(NoEscape(r"\centering\small"))
+            table.append(NoEscape(r"\begin{tabular}{p{0.32\linewidth}p{0.6\linewidth}}"))
+            table.append(NoEscape(r"\toprule"))
+            table.append(NoEscape(
+                r"\textbf{" + get_inspection_text("col_item", lang) + r"} & \textbf{"
+                + get_inspection_text("col_record", lang) + r"} \\"
+            ))
+            table.append(NoEscape(r"\midrule"))
+            for label, value in rows:
+                table.append(NoEscape(f"{label} & {value} \\\\"))
+            table.append(NoEscape(r"\bottomrule"))
+            table.append(NoEscape(r"\end{tabular}"))
+        doc.append(NoEscape(r"\FloatBarrier"))
+
+    def _add_inspection_section(self, doc: pl.Document) -> None:
+        """Who inspected, with what, when and under which conditions (IEC TS 62446-3 clause 8)."""
+        lang = self.config.language
+        cfg = self.config
+
+        def t(key: str) -> str:
+            return get_inspection_text(key, lang)
+
+        none = t("not_informed")
+        unavailable = t("not_available")
+        details = cfg.inspection or InspectionDetails()
+        flight = cfg.flight or FlightMetadata()
+
+        def with_serial(text: str, serial: Optional[str]) -> str:
+            if not serial:
+                return text
+            return f"{text}, {self._fmt_tokens(t('serial'), serial=escape_latex(serial))}"
+
+        execution = []
+        if flight.start:
+            end = flight.end or flight.start
+            execution.append((t("flight_time"), self._fmt_tokens(
+                t("flight_time_value"),
+                date=self._fmt_date(flight.start),
+                start=flight.start.strftime("%H:%M"),
+                end=end.strftime("%H:%M"),
+            )))
+        else:
+            execution.append((t("flight_time"), none))
+        execution.append((t("frames"), str(flight.frame_count) if flight.frame_count else none))
+
+        pilot = escape_latex(details.pilot_name) if details.pilot_name else none
+        if details.pilot_name and details.pilot_qualification:
+            pilot += f" ({escape_latex(details.pilot_qualification)})"
+        execution.append((t("pilot"), pilot))
+
+        engineer, crea = cfg.engineer_name, cfg.crea_number
+        if engineer and crea:
+            engineer_text = self._fmt_tokens(t("engineer_value"), name=escape_latex(engineer), crea=escape_latex(crea))
+        else:
+            engineer_text = escape_latex(engineer) if engineer else none
+        execution.append((t("engineer"), engineer_text))
+
+        make = flight.camera_make or ""
+        if flight.drone_model:
+            aircraft = escape_latex(f"{make} {flight.drone_model}".strip())
+            execution.append((t("aircraft"), with_serial(aircraft, flight.drone_serial)))
+        if flight.camera_model:
+            camera = escape_latex(f"{make} {flight.camera_model}".strip())
+            if make.upper() == "DJI":
+                # Every DJI thermal camera the DJI Thermal SDK reads is an uncooled long-wave microbolometer.
+                camera = self._fmt_tokens(t("camera_value"), camera=camera)
+            execution.append((t("camera"), with_serial(camera, flight.camera_serial)))
+        else:
+            execution.append((t("camera"), none))
+
+        if details.calibration_certificate or details.calibration_lab or details.calibration_date:
+            calibration = self._fmt_tokens(
+                t("calibration_value"),
+                lab=escape_latex(details.calibration_lab) if details.calibration_lab else none,
+                certificate=escape_latex(details.calibration_certificate) if details.calibration_certificate else none,
+                date=self._fmt_date(details.calibration_date) if details.calibration_date else none,
+            )
+        else:
+            calibration = t("not_informed_f")
+        execution.append((t("calibration"), calibration))
+        execution.append((t("processing"), t("processing_value")))
+
+        cond = cfg.conditions
+        sat = cfg.satellite
+        if details.onsite_irradiance_wm2 is not None:
+            irradiance = self._fmt_tokens(
+                t("irradiance_measured"),
+                value=f"{details.onsite_irradiance_wm2:.0f}",
+                source=escape_latex(details.onsite_irradiance_source) if details.onsite_irradiance_source else none,
+            )
+        elif sat and sat.irradiance_wm2 is not None and sat.irradiance_scans:
+            irradiance = self._fmt_tokens(
+                t("irradiance_satellite"),
+                value=f"{sat.irradiance_wm2:.0f}",
+                satellite=sat.satellite,
+                resolution=sat.irradiance_resolution or "—",
+                start=sat.irradiance_scans[0].strftime("%H:%M"),
+                end=(sat.irradiance_scans[-1] + timedelta(minutes=10)).strftime("%H:%M"),
+            )
+        elif cond and cond.irradiance_wm2 is not None:
+            irradiance = self._fmt_tokens(
+                t("irradiance_estimated"),
+                value=f"{cond.irradiance_wm2:.0f}",
+                start=cond.hour_start.strftime("%H:%M"),
+                end=(cond.hour_start + timedelta(hours=1)).strftime("%H:%M"),
+            )
+        else:
+            irradiance = unavailable
+
+        def reading(value: Optional[float], fmt: str, unit: str) -> str:
+            return f"{value:{fmt}}{unit}" if value is not None else unavailable
+
+        if sat and sat.cloud_okta is not None:
+            cloud = self._fmt_tokens(t("cloud_satellite"), okta=sat.cloud_okta, satellite=sat.satellite)
+        elif cond and cond.cloud_cover_okta is not None:
+            cloud = f"{cond.cloud_cover_okta}/8"
+        else:
+            cloud = unavailable
+
+        conditions = [(t("irradiance"), irradiance)]
+        if sat and sat.clear_sky_wm2 is not None:
+            conditions.append((t("clear_sky"), self._fmt_tokens(t("clear_sky_value"), value=f"{sat.clear_sky_wm2:.0f}")))
+        conditions += [
+            (t("air_temperature"), reading(cond.air_temperature_c if cond else None, ".1f", " °C")),
+            (t("humidity"), reading(cond.relative_humidity_pct if cond else None, ".0f", r"\%")),
+            (t("wind"), reading(cond.wind_speed_kmh if cond else None, ".0f", " km/h")),
+            (t("cloud"), cloud),
+        ]
+        satellite_used = bool(sat and sat.satellite and (sat.irradiance_wm2 is not None or sat.cloud_okta is not None))
+        if satellite_used:
+            conditions.append((t("satellite_source"), self._fmt_tokens(t("satellite_source_value"), satellite=sat.satellite)))
+        if cond:
+            if cond.grid_latitude is not None and cond.grid_longitude is not None:
+                source = self._fmt_tokens(
+                    t("source_value"),
+                    dataset=t(f"dataset_{cond.dataset}"),
+                    lat=f"{cond.grid_latitude:.2f}",
+                    lon=f"{cond.grid_longitude:.2f}",
+                )
+            else:
+                source = t(f"dataset_{cond.dataset}")
+            conditions.append((t("source_weather") if satellite_used else t("source"), source))
+        measurement = cfg.measurement
+        if measurement:
+            if measurement.distance_from_altitude:
+                distance = self._fmt_tokens(t("distance_altitude"), max=f"{measurement.object_distance_m:.0f}")
+            else:
+                distance = self._fmt_tokens(t("distance_fixed"), value=f"{measurement.object_distance_m:.0f}")
+            conditions += [
+                (t("emissivity"), self._fmt_tokens(t("emissivity_value"), value=f"{measurement.emissivity:.2f}")),
+                (t("reflected"), self._fmt_tokens(
+                    t(f"reflected_{measurement.reflected_source}"), value=f"{measurement.reflected_temp_c:.1f}"
+                )),
+                (t("calc_humidity"), self._fmt_tokens(
+                    t(f"humidity_{measurement.humidity_source}"), value=f"{measurement.relative_humidity_pct:.0f}"
+                )),
+                (t("distance"), distance),
+            ]
+
+        with doc.create(pl.Section(t("section_title"))):
+            doc.append(NoEscape(t("intro")))
+            doc.append(NoEscape(r"\par\medskip"))
+            self._add_record_table(doc, t("execution_caption"), execution)
+            self._add_record_table(doc, t("conditions_caption"), conditions)
+            doc.append(NoEscape(t("limits_note")))
+            doc.append(NoEscape(r"\par"))
+
+    def _deviation_text(self, key: str, values: dict) -> str:
+        """Localize one (key, values) pair from list_deviations()."""
+        lang = self.config.language
+
+        def d(k: str) -> str:
+            return get_deviation_text(k, lang)
+
+        if key == "calibration_expired":
+            return self._fmt_tokens(d(key), date=self._fmt_date(values["date"]))
+        if key == "irradiance_satellite":
+            return self._fmt_tokens(d(key), satellite=values["satellite"])
+        if key == "irradiance_estimated":
+            return self._fmt_tokens(d(key), dataset=get_inspection_text(f"dataset_{values['dataset']}", lang))
+        if key == "weather_estimated":
+            text = d("weather_estimated_cloud") if values["with_cloud"] else d(key)
+            return self._fmt_tokens(text, dataset=get_inspection_text(f"dataset_{values['dataset']}", lang))
+        if key == "irradiance_low":
+            return self._fmt_tokens(d(key), kind=d(f"kind_{values['kind']}"), value=f"{values['value']:.0f}")
+        if key == "wind_high":
+            return self._fmt_tokens(d(key), value=f"{values['value']:.0f}")
+        if key == "cloud_high":
+            return self._fmt_tokens(d(key), kind=d(f"cloud_kind_{values['kind']}"), okta=values["okta"])
+        if key in ("reflected_estimated", "reflected_default"):
+            return self._fmt_tokens(d(key), value=f"{values['value']:.1f}")
+        if key == "humidity_default":
+            return self._fmt_tokens(d(key), value=f"{values['value']:.0f}")
+        return d(key)
+
+    def _add_deviations_section(self, doc: pl.Document) -> None:
+        """Every known deviation or limitation of the procedure (IEC TS 62446-3, 5.1)."""
+        lang = self.config.language
+        cfg = self.config
+        deviations = list_deviations(cfg.inspection, cfg.flight, cfg.conditions, cfg.measurement, cfg.satellite)
+        doc.append(NoEscape(r"\newpage"))
+        with doc.create(pl.Section(get_deviation_text("section_title", lang))):
+            if not deviations:
+                doc.append(NoEscape(get_deviation_text("none", lang)))
+                return
+            doc.append(NoEscape(get_deviation_text("intro", lang)))
+            doc.append(NoEscape(r"\begin{itemize}"))
+            for key, values in deviations:
+                doc.append(NoEscape(r"\item " + self._deviation_text(key, values)))
+            doc.append(NoEscape(r"\end{itemize}"))
+
     def _add_area_overview(self, doc: pl.Document) -> None:
         """Add area overview section with orthophoto images."""
         section_title = get_report_text("area_overview_title", self.config.language)
@@ -476,8 +727,8 @@ RoyalBlue]
             # Summary table of total defects before detailed breakdown
             summary_rows = [
                 (defect_labels.get("hotspots", "Hotspots"), self.total_hotspots),
-                (defect_labels.get("faulty_diodes", "Faulty Bypass Diodes"), self.total_faulty_diodes),
-                (defect_labels.get("offline_panels", "Offline Panels"), self.total_offline),
+                (defect_labels.get("faultydiodes", "Faulty Bypass Diodes"), self.total_faulty_diodes),
+                (defect_labels.get("offlinepanels", "Offline Panels"), self.total_offline),
             ]
 
             summary_caption = get_report_text("defect_summary_title", self.config.language)
@@ -691,8 +942,8 @@ RoyalBlue]
                         )
                     )
                 )
-                table.append(NoEscape(r"\centering"))
-                with doc.create(pl.Tabular("llcc")) as tabular:
+                table.append(NoEscape(r"\centering\small"))
+                with doc.create(pl.Tabular(r"llccp{4.8cm}")) as tabular:
                     tabular.append(NoEscape(r"\toprule"))
                     tabular.add_row(
                         [
@@ -700,6 +951,7 @@ RoyalBlue]
                             get_capacity_text("col_defect", lang),
                             NoEscape(get_capacity_text("col_dt", lang)),
                             get_capacity_text("col_severity", lang),
+                            get_guidance_text("col_action", lang),
                         ],
                         escape=False,
                     )
@@ -712,12 +964,14 @@ RoyalBlue]
                             if item.severity in SEVERITY_ORDER
                             else "—"
                         )
+                        _, _, short_key = guidance_keys(item.defect_type, item.severity)
                         tabular.add_row(
                             [
                                 item.panel_id,
                                 defect_labels.get(item.defect_type, item.defect_type),
                                 dt,
                                 severity_label,
+                                get_guidance_text(short_key, lang),
                             ]
                         )
                     tabular.append(NoEscape(r"\bottomrule"))
@@ -864,6 +1118,19 @@ RoyalBlue]
 
             # Add temperature legend table from annotation manifest
             self._add_thermal_legend_table(doc, panel.panel_id, defect_type_no_underscore, defect_num)
+
+        # Likely cause and recommended action (IEC TS 62446-3 clause 8)
+        lang = self.config.language
+        severity = self._worst_severity(panel.panel_id, defect_type_no_underscore)
+        cause_key, action_key, _ = guidance_keys(defect_type, severity)
+        doc.append(NoEscape(
+            r"\noindent\textbf{" + get_guidance_text("likely_cause", lang) + "} "
+            + get_guidance_text(cause_key, lang) + r"\\"
+        ))
+        doc.append(NoEscape(
+            r"\textbf{" + get_guidance_text("recommended_action", lang) + "} "
+            + get_guidance_text(action_key, lang) + r"\par\medskip"
+        ))
 
         # Add descriptive text
         panel_text = text_template.format(panel_id=panel.panel_id)

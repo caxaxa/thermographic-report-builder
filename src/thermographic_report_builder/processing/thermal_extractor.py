@@ -18,6 +18,7 @@ from typing import Optional, Tuple
 
 from ..utils.logger import get_logger
 from ..config import settings
+from .flight_metadata import HEAD_BYTES, read_frame_metadata
 
 logger = get_logger(__name__)
 
@@ -75,6 +76,29 @@ class ThermalCalibration:
             relative_humidity=settings.thermal_relative_humidity,
             reflected_temp=settings.thermal_reflected_temp,
         )
+
+    @classmethod
+    def from_measurement(cls, measurement) -> "ThermalCalibration":
+        """Create calibration from this inspection's MeasurementParameters."""
+        return cls(
+            emissivity=measurement.emissivity,
+            object_distance=measurement.object_distance_m,
+            relative_humidity=measurement.relative_humidity_pct,
+            reflected_temp=measurement.reflected_temp_c,
+        )
+
+
+def frame_distance(image_path: Path) -> Optional[float]:
+    """Camera-to-target distance for one frame: the laser rangefinder, else the relative altitude."""
+    try:
+        with open(image_path, "rb") as f:
+            meta = read_frame_metadata(f.read(HEAD_BYTES))
+        laser, status = meta.get("rangefinder"), meta.get("rangefinder_status")
+        if laser and laser > 0 and (status is None or status.lower() == "normal"):
+            return laser
+    except OSError as e:
+        logger.debug(f"Could not read the rangefinder of {image_path}: {e}")
+    return extract_altitude_from_exif(image_path)
 
 
 def extract_altitude_from_exif(image_path: Path) -> Optional[float]:
@@ -171,13 +195,13 @@ class ThermalExtractor:
                 # Determine object distance
                 object_distance = self.calibration.object_distance
 
-                # Try to extract actual altitude from EXIF if auto_altitude is enabled
+                # Each frame's laser range (else its altitude) if auto_altitude is enabled
                 if settings.thermal_auto_altitude:
-                    exif_altitude = extract_altitude_from_exif(image_path)
-                    if exif_altitude is not None:
-                        # Clamp to valid range (1-25m)
-                        object_distance = max(1.0, min(25.0, exif_altitude))
-                        logger.debug(f"Using EXIF altitude: {object_distance}m")
+                    distance = frame_distance(image_path)
+                    if distance is not None:
+                        # Clamp to the SDK's valid range (1-25m)
+                        object_distance = max(1.0, min(25.0, distance))
+                        logger.debug(f"Using frame distance: {object_distance}m")
 
                 # Use calibrated parsing with DIRP2
                 temp_array = self.thermal.parse_dirp2(
